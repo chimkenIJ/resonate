@@ -44,30 +44,6 @@ Without a complete `ResonateConfig.plist`, the app automatically uses mock servi
 
 To run on an iPhone, select your device in Xcode and set your development team under **Signing & Capabilities**. Use an iPhone running iOS 17 or later. Real camera detection needs a physical device, and indoor room scanning needs a supported LiDAR device. The simulator cannot verify camera, LiDAR, or vibration behavior.
 
-## Run with real services
-
-### Accounts and app configuration
-
-Follow [Backend setup](docs/BACKEND_SETUP.md) to create your Auth0 application and Supabase project, connect Auth0 to Supabase, and apply all migrations in `supabase/migrations/`.
-
-Copy the example configuration from the repository root:
-
-```sh
-cp config/ResonateConfig.example.plist Resonate/Resources/ResonateConfig.plist
-```
-
-Fill in `SupabaseURL`, `SupabaseKey`, `Auth0Domain`, `Auth0ClientID`, and `Auth0Audience`. Missing values or `YOUR_` placeholders keep the app in mock mode. Rebuild after changing the file.
-
-Use your actual bundle identifier for Auth0's callback and logout URLs:
-
-```text
-YOUR_BUNDLE_ID://YOUR_AUTH0_DOMAIN/ios/YOUR_BUNDLE_ID/callback
-```
-
-The project currently uses `com.ashleyni.Resonate`. The backend guide contains an older example identifier, so replace it with the one shown in your Xcode target.
-
-The app configuration is gitignored. Only public client values belong there; keep database service-role keys and Gemini/ElevenLabs API keys on the backend.
-
 ### Search and routing
 
 Follow [Map server setup](docs/MAP_SERVER.md) for the Georgia OSM import, Valhalla, Nominatim, accessibility data, and the `geocode` and `route` Edge Functions.
