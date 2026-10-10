@@ -39,11 +39,14 @@ final class IndoorScanViewModel {
     var coaching: String? { snapshot?.coaching }
 
     func run() async {
+        let generation = feedback.screenGeneration
         guard scanner.isSupported else {
             await feedback.announce(unsupportedMessage, priority: .info)
             return
         }
-        guard await scanner.requestPermission() else {
+        let granted = await scanner.requestPermission()
+        guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+        guard granted else {
             cameraAvailable = false
             await feedback.announce(AppError.permissionDenied(.camera).spokenMessage, priority: .info)
             return
@@ -51,6 +54,7 @@ final class IndoorScanViewModel {
         await feedback.announce("Scanning the room. Move the phone slowly from side to side.", priority: .navigation)
 
         for await next in scanner.snapshots() {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             snapshot = next
             guard !isDescribing else { continue }
             let now = Date.now
@@ -86,13 +90,16 @@ final class IndoorScanViewModel {
         isDescribing = true
         defer { isDescribing = false }
         feedback.stopSpeech()
+        let generation = feedback.screenGeneration
         await feedback.announce("Looking around the room.", priority: .info)
         do {
             guard let jpeg = await scanner.latestFrameJPEG() else { throw AppError.server(message: "The camera isn't ready yet.") }
             let text = try await describer.describe(jpeg: jpeg, setting: .indoor)
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             roomDescription = text
             await feedback.announce(text, priority: .snapshot)
         } catch {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             await feedback.announce("I couldn't describe the room right now.", priority: .info)
         }
     }

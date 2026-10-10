@@ -12,9 +12,11 @@ final class AppModel {
 
     let services: AppServices
     let feedback: FeedbackCenter
-    let router = AppRouter()
+    let router: AppRouter
 
-    private(set) var phase: Phase = .launching
+    private(set) var phase: Phase = .launching {
+        didSet { if phase != oldValue { feedback.endScreenSpeech() } }
+    }
     private(set) var authState: AuthState = .signedOut
     private(set) var preferences = UserPreferences() {
         didSet { feedback.preferences = preferences }
@@ -22,12 +24,14 @@ final class AppModel {
 
     init(services: AppServices) {
         self.services = services
-        self.feedback = FeedbackCenter(
+        let feedback = FeedbackCenter(
             speech: services.speech,
             haptics: services.haptics,
             tones: services.tones,
             preferences: UserPreferences()
         )
+        self.feedback = feedback
+        self.router = AppRouter { feedback.endScreenSpeech() }
     }
 
     func bootstrap() async {

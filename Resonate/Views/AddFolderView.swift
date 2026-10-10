@@ -4,6 +4,7 @@ import SwiftUI
 struct AddFolderView: View {
     @State private var model: AddFolderViewModel
     private let onCreated: (PlaceFolder) async -> Void
+    @State private var createTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isNameFocused: Bool
 
@@ -86,8 +87,9 @@ struct AddFolderView: View {
                 }
 
                 PillButton(title: "Make folder", systemImage: "folder.badge.plus") {
-                    Task {
+                    createTask = Task {
                         if let folder = await model.create() {
+                            guard !Task.isCancelled else { return }
                             await onCreated(folder)
                             dismiss()
                         }
@@ -101,6 +103,7 @@ struct AddFolderView: View {
         .background(Palette.background.ignoresSafeArea())
         .presentationBackground(Palette.background)
         .onAppear { isNameFocused = true }
+        .onDisappear { createTask?.cancel() }
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

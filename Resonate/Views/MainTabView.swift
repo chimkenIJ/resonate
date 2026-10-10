@@ -80,7 +80,7 @@ struct MainTabView: View {
 
 #Preview {
     let app = AppModel.preview()
-    MainTabView(searchModel: DestinationSearchViewModel(services: app.services, feedback: app.feedback))
+    MainTabView(searchModel: DestinationSearchViewModel(services: app.services))
         .environment(app)
         .preferredColorScheme(.dark)
 }

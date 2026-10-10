@@ -153,6 +153,11 @@ nonisolated struct Route: Identifiable, Codable, Hashable, Sendable {
         let access = isStepFree ? "step-free" : "includes steps"
         return "\(DurationText.spoken(durationSeconds)), \(access)"
     }
+
+    var spokenOverview: String {
+        let details = features.map(\.label).joined(separator: ", ")
+        return "To \(destination.name). \(spokenSummary)." + (details.isEmpty ? "" : " Along the way: \(details).")
+    }
 }
 
 /// The steepest slope a route may use, in plain words.

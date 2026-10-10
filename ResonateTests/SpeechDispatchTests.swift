@@ -12,6 +12,7 @@ struct SpeechDispatchTests {
         var lastSpoken: String?
         func speak(_ text: String, priority: SpeechPriority, fragments: [String]?) async {}
         func stop() {}
+        func waitUntilFinished() async {}
         func repeatLast() async {}
         func prewarm(_ phrases: [String]) async {}
         func preview(_ text: String, voiceID: String?) async { previews.append((text, voiceID)) }
