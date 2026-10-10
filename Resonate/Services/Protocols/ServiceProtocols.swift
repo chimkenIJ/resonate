@@ -64,7 +64,14 @@ protocol RoutingServicing: AnyObject {
 
 /// The app's voice. ElevenLabs is the only voice: live phrases stream from the API,
 /// and safety phrases come from clips cached on the phone so they work offline.
+nonisolated struct SpeechVoice: Codable, Hashable, Sendable, Identifiable {
+    let id: String
+    let name: String
+}
+
 protocol SpeechServicing: AnyObject {
+    func availableVoices() async throws -> [SpeechVoice]
+    func selectVoice(_ id: String?)
     var isSpeaking: Bool { get }
     var lastSpoken: String? { get }
     /// Speaks `text`. A higher priority interrupts anything lower that is playing.
@@ -79,6 +86,9 @@ protocol SpeechServicing: AnyObject {
 }
 
 extension SpeechServicing {
+    func availableVoices() async throws -> [SpeechVoice] { [] }
+    func selectVoice(_ id: String?) {}
+
     func speak(_ text: String, priority: SpeechPriority) async {
         await speak(text, priority: priority, fragments: nil)
     }

@@ -93,7 +93,7 @@ final class RoomScanService: IndoorScanServicing {
         all += people.compactMap { person -> RoomElement? in
             guard let distance = person.distanceMeters else { return nil }
             // Place it on the floor in front of the user along the box's direction.
-            let angle = (person.boundingBox.midX - 0.5) * 1.1 // ~63° horizontal field of view in portrait
+            let angle = Double(person.boundingBox.midX - 0.5) * 1.1 // ~63° horizontal field of view in portrait
             let ahead = pose.forward * cos(angle) + pose.right * sin(angle)
             let center = pose.position + ahead * distance
             let half = 0.25
@@ -187,7 +187,8 @@ nonisolated extension RoomElement {
         let center = transform.columns.3
         let x = transform.columns.0 * (dimensions.x / 2)
         let z = transform.columns.2 * (dimensions.z / 2)
-        return [center - x - z, center + x - z, center + x + z, center - x + z].map { SIMD2(Double($0.x), Double($0.z)) }
+        let corners: [SIMD4<Float>] = [center - x - z, center + x - z, center + x + z, center - x + z]
+        return corners.map { SIMD2<Double>(Double($0.x), Double($0.z)) }
     }
 
     private static func describe(_ category: CapturedRoom.Object.Category) -> (String, ObjectCategory) {

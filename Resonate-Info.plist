@@ -17,13 +17,9 @@
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<!-- Lets a development build reach the map server on your Mac (http://<name>.local).
-		     Only local-network addresses are exempt; everything else still requires HTTPS. -->
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Resonate connects to the map server running on your Mac to find places and walking routes.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>AtkinsonHyperlegibleNext-Regular.ttf</string>

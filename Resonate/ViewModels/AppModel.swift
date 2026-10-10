@@ -49,9 +49,7 @@ final class AppModel {
     func signIn() async throws {
         let user = try await services.auth.signIn()
         authState = .signedIn(user)
-        await syncAccount(user)
-        // Saved places and preferences now come from the account.
-        if let saved = await services.preferences.load() { preferences = saved }
+        await routeAfterAuth()
     }
 
     func signOut() async {
@@ -64,7 +62,17 @@ final class AppModel {
     func updatePreferences(_ newValue: UserPreferences) async throws {
         try await services.preferences.save(newValue)
         preferences = newValue
-        if phase == .onboarding { phase = .ready }
+        if phase == .onboarding {
+            if case .signedIn(let user) = authState {
+                UserDefaults.standard.set(true, forKey: "onboarding.\(user.id)")
+            }
+            phase = .ready
+        }
+    }
+
+    private var needsAccountOnboarding: Bool {
+        guard case .signedIn(let user) = authState else { return false }
+        return !UserDefaults.standard.bool(forKey: "onboarding.\(user.id)")
     }
 
     private func routeAfterAuth() async {
@@ -77,7 +85,7 @@ final class AppModel {
         }
         if let saved = await services.preferences.load() {
             preferences = saved
-            phase = .ready
+            phase = needsAccountOnboarding ? .onboarding : .ready
         } else {
             phase = .onboarding
         }

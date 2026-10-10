@@ -11,6 +11,7 @@ final class WalkViewModel {
     }
 
     private(set) var objects: [DetectedObject] = []
+    private(set) var currentLocation: GeoPoint?
     private(set) var imageSize: CGSize?
     private(set) var cameraAvailable = true
     private(set) var alert: ObstacleAlert?
@@ -112,6 +113,7 @@ final class WalkViewModel {
 
         for await fix in location.updates() {
             guard var engine = navigation, !engine.hasArrived else { break }
+            currentLocation = fix.point
             let events = engine.update(fix)
             navigation = engine
             for event in events {
@@ -172,13 +174,13 @@ final class WalkViewModel {
         guard !isDescribing else { return }
         isDescribing = true
         defer { isDescribing = false }
-        await feedback.announceOnce(key: "gemini", "Describing sends one photo to Google Gemini to put it into words. Resonate doesn't save it.")
+        feedback.stopSpeech()
         await feedback.announce("Looking around.", priority: .info)
         do {
             guard let jpeg = await detection.latestFrameJPEG() else { throw AppError.server(message: "The camera isn't ready yet.") }
             let text = try await describer.describe(jpeg: jpeg, setting: .outdoor)
             sceneDescription = text
-            await feedback.announce(text, priority: .info)
+            await feedback.announce(text, priority: .snapshot)
         } catch {
             await feedback.announce("I couldn't describe the scene right now.", priority: .info)
         }

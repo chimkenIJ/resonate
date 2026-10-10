@@ -340,13 +340,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = MRA5233N88;
+				DEVELOPMENT_TEAM = QXV2U3HP8N;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Resonate-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Resonate;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Resonate uses the camera to find obstacles, doors, and walls around you and describe them out loud.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Resonate connects to the map server running on your Mac to find places and walking routes.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Resonate uses your location to keep giving spoken directions while your phone is in your pocket.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Resonate uses your location to find nearby places and give spoken walking directions.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Resonate uses the microphone so you can say where you want to go.";
@@ -362,7 +363,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.ishajain.Resonate;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ashleyni.Resonate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -384,13 +385,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = MRA5233N88;
+				DEVELOPMENT_TEAM = QXV2U3HP8N;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Resonate-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Resonate;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Resonate uses the camera to find obstacles, doors, and walls around you and describe them out loud.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Resonate connects to the map server running on your Mac to find places and walking routes.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Resonate uses your location to keep giving spoken directions while your phone is in your pocket.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Resonate uses your location to find nearby places and give spoken walking directions.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Resonate uses the microphone so you can say where you want to go.";
@@ -406,7 +408,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.ishajain.Resonate;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ashleyni.Resonate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -427,11 +429,11 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = MRA5233N88;
+				DEVELOPMENT_TEAM = QXV2U3HP8N;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.ishajain.ResonateTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ashleyni.ResonateTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -449,11 +451,11 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = MRA5233N88;
+				DEVELOPMENT_TEAM = QXV2U3HP8N;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.ishajain.ResonateTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ashleyni.ResonateTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

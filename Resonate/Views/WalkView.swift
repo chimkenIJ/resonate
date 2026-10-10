@@ -25,6 +25,12 @@ struct WalkView: View {
             VStack(spacing: 0) {
                 topBar
                 Spacer()
+                if let route = model.route {
+                    RouteMapView(route: route, currentLocation: model.currentLocation)
+                        .frame(height: 160)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .padding(.horizontal, Metrics.screenPadding)
+                }
                 sheet
             }
         }

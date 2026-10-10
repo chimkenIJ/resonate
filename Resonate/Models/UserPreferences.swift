@@ -59,6 +59,8 @@ nonisolated struct UserPreferences: Codable, Hashable, Sendable {
     var needs: Set<AssistNeed> = [.gettingAround]
     var alertChannels: Set<AlertChannel> = [.voice, .buzzes]
     var routing = RoutingPreferences()
+    var voiceID: String?
+
 
     /// "Spoken + 2 buzzes", shown in the alert sheet.
     func deliveryDescription(for severity: AlertSeverity) -> String {

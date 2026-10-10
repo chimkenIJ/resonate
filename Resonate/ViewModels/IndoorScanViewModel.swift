@@ -52,6 +52,7 @@ final class IndoorScanViewModel {
 
         for await next in scanner.snapshots() {
             snapshot = next
+            guard !isDescribing else { continue }
             let now = Date.now
 
             if let alert = next.alert {
@@ -72,6 +73,10 @@ final class IndoorScanViewModel {
     }
 
     func repeatLast() async {
+        if let roomDescription {
+            await feedback.announce(roomDescription, priority: .snapshot)
+            return
+        }
         guard let snapshot else { return await feedback.repeatLast() }
         await feedback.announce("\(snapshot.headline) \(snapshot.guidance)", priority: .info)
     }
@@ -80,13 +85,13 @@ final class IndoorScanViewModel {
         guard !isDescribing else { return }
         isDescribing = true
         defer { isDescribing = false }
-        await feedback.announceOnce(key: "gemini", "Describing sends one photo to Google Gemini to put it into words. Resonate doesn't save it.")
+        feedback.stopSpeech()
         await feedback.announce("Looking around the room.", priority: .info)
         do {
             guard let jpeg = await scanner.latestFrameJPEG() else { throw AppError.server(message: "The camera isn't ready yet.") }
             let text = try await describer.describe(jpeg: jpeg, setting: .indoor)
             roomDescription = text
-            await feedback.announce(text, priority: .info)
+            await feedback.announce(text, priority: .snapshot)
         } catch {
             await feedback.announce("I couldn't describe the room right now.", priority: .info)
         }
