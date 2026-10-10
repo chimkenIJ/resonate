@@ -78,7 +78,9 @@ struct SpeechLifecycleTests {
         await speech.speak(UUID().uuidString, priority: .info)
         while !speech.isSpeaking { await Task.yield() }
         await speech.speak("Queued old screen phrase", priority: .info)
+        let waiting = Task { await speech.waitUntilFinished() }
         speech.stop()
+        await waiting.value
         await Task.yield()
         #expect(!speech.isSpeaking)
         #expect(speech.lastSpoken == nil)

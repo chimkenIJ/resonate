@@ -135,6 +135,10 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
         startWorker()
     }
 
+    func waitUntilFinished() async {
+        while let worker, !Task.isCancelled { await worker.value }
+    }
+
     func stop() {
         lastSpoken = nil
         pending.removeAll()

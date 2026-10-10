@@ -64,6 +64,11 @@ final class FeedbackCenter {
 
     func stopSpeech() { speech.stop() }
 
+    func waitForSpeech() async {
+        guard !Task.isCancelled else { return }
+        await speech.waitUntilFinished()
+    }
+
     func endScreenSpeech() {
         screenGeneration += 1
         lastAlertKey = nil
