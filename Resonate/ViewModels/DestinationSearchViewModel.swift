@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Observation
 
 /// Voice or text search for a destination. Shows and reads aloud the closest 3–5 results.
@@ -65,7 +66,7 @@ final class DestinationSearchViewModel {
         guard !text.isEmpty else { return }
         phase = .searching
         do {
-            let here = try await location.currentLocation()
+            let here = try await currentLocation(timeout: 8)
             guard GeorgiaRegion.contains(here) else { throw AppError.outsideGeorgia }
             results = try await geocoding.search(text, near: here, limit: resultLimit)
             phase = .results
@@ -90,8 +91,13 @@ final class DestinationSearchViewModel {
                 query = partial
             }
         } catch {
-            await fail(.server(message: "I didn't catch that. Tap the microphone and try again."))
-            return
+            // The recognizer often ends with an error right after the mic turns off. If it heard
+            // something, search for that instead of throwing it away.
+            Log.data.error("Speech recognition ended with: \(String(describing: error), privacy: .public)")
+            if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                await fail(.server(message: "I didn't catch that. Tap the microphone and try again."))
+                return
+            }
         }
         guard !Task.isCancelled else { return }
         if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -99,6 +105,20 @@ final class DestinationSearchViewModel {
             await feedback.announce("I didn't hear a place. Tap the microphone to try again.", priority: .info)
         } else {
             await search()
+        }
+    }
+
+    /// The user's location, or a spoken error if GPS doesn't answer in time (indoors, no signal).
+    private func currentLocation(timeout seconds: Double) async throws -> GeoPoint {
+        let location = location
+        return try await withThrowingTaskGroup(of: GeoPoint.self) { group in
+            group.addTask { try await location.currentLocation() }
+            group.addTask {
+                try await Task.sleep(for: .seconds(seconds))
+                throw AppError.server(message: "I couldn't find where you are. Try again near a window or outside.")
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
         }
     }
 

@@ -55,6 +55,9 @@ final class MockSceneDescriptionService: SceneDescriptionServicing {
 }
 
 final class MockColorRecognitionService: ColorRecognitionServicing {
+    var previewSource: CameraPreviewSource { .none }
+    func requestPermission() async -> Bool { true }
+
     func readings() -> AsyncStream<ColorReading> {
         cycling([
             ColorReading(name: "Navy blue", family: "Blue", hex: "#1F2A4D"),

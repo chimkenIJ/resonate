@@ -36,6 +36,8 @@ protocol SavedPlacesServicing: AnyObject {
     func createFolder(name: String, accent: Accent, icon: FolderIcon) async throws -> PlaceFolder
     func save(_ place: Place, routeSummary: String?, to folderID: UUID) async throws -> SavedPlace
     func deletePlace(_ id: UUID) async throws
+    /// Deletes a folder and every place in it.
+    func deleteFolder(_ id: UUID) async throws
 }
 
 // MARK: - Location, search, routing
@@ -88,6 +90,8 @@ protocol SpeechServicing: AnyObject {
 extension SpeechServicing {
     func availableVoices() async throws -> [SpeechVoice] { [] }
     func selectVoice(_ id: String?) {}
+    /// Plays `text` in a specific voice right away (voice picker samples). Doesn't change the app's voice.
+    func preview(_ text: String, voiceID: String?) async {}
 
     func speak(_ text: String, priority: SpeechPriority) async {
         await speak(text, priority: priority, fragments: nil)
@@ -155,6 +159,8 @@ protocol SceneDescriptionServicing: AnyObject {
 
 /// Color recognition module ("Telling colors apart").
 protocol ColorRecognitionServicing: AnyObject {
-    /// Names the color at the center of the camera frame.
+    var previewSource: CameraPreviewSource { get }
+    func requestPermission() async -> Bool
+    /// Names the color at the center of the camera frame, each time it changes.
     func readings() -> AsyncStream<ColorReading>
 }

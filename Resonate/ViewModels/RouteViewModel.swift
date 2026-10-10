@@ -11,6 +11,8 @@ final class RouteViewModel {
 
     let place: Place
     private(set) var state: State = .loading
+    /// Live position for the "you are here" dot.
+    private(set) var currentLocation: GeoPoint?
 
     private let location: any LocationServicing
     private let routing: any RoutingServicing
@@ -51,5 +53,12 @@ final class RouteViewModel {
     private func spokenOverview(_ route: Route) -> String {
         let features = route.features.map(\.label).joined(separator: ", ")
         return "To \(route.destination.name). \(route.spokenSummary)." + (features.isEmpty ? "" : " \(features).")
+    }
+
+    /// Follows the user's position while the route screen is open.
+    func trackLocation() async {
+        for await fix in location.updates() {
+            currentLocation = fix.point
+        }
     }
 }

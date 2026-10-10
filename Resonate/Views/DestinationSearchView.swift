@@ -37,6 +37,13 @@ struct DestinationSearchView: View {
                     }
                 }
 
+                if !model.isListening, !model.query.trimmingCharacters(in: .whitespaces).isEmpty, model.phase != .searching {
+                    PillButton(title: "Search", systemImage: "magnifyingglass", accessibilityHint: "Finds places matching what you typed or said") {
+                        isFieldFocused = false
+                        Task { await model.search() }
+                    }
+                }
+
                 status
 
                 ForEach(model.results) { place in

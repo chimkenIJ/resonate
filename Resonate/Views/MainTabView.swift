@@ -15,16 +15,16 @@ struct MainTabView: View {
 
         NavigationStack(path: router.binding(for: router.tab)) {
             root(for: router.tab)
+                // On each tab's main screen (pushed screens have their own bottom buttons), so the
+                // screen's layout knows exactly how much room the tab bar takes.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    ResonateTabBar(selection: $router.tab) {
+                        router.cover = .walk(nil)
+                    }
+                }
                 .navigationDestination(for: AppRoute.self) { destination($0, in: router.tab) }
         }
         .id(router.tab)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if router.isTabBarVisible {
-                ResonateTabBar(selection: $router.tab) {
-                    router.cover = .walk(nil)
-                }
-            }
-        }
         .fullScreenCover(item: $router.cover) { cover in
             coverView(cover)
                 .environment(app)

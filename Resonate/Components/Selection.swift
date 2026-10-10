@@ -62,6 +62,7 @@ struct ToggleTile: View {
     let title: String
     let accent: Accent
     let isOn: Bool
+    var accessibilityHint: String? = nil
     let action: () -> Void
 
     var body: some View {
@@ -69,10 +70,12 @@ struct ToggleTile: View {
             Text(title)
                 .appFont(isOn ? .primaryButton : .secondaryButton)
                 .foregroundStyle(isOn ? Palette.onAccent : Palette.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
                 .padding(.horizontal, 8)
-                .frame(maxWidth: .infinity, minHeight: Metrics.primaryButtonHeight)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: Metrics.primaryButtonHeight, maxHeight: .infinity)
                 .background(RoundedRectangle(cornerRadius: Metrics.innerRadius).fill(isOn ? accent.color : Palette.surface))
                 .overlay {
                     if !isOn {
@@ -83,6 +86,7 @@ struct ToggleTile: View {
         }
         .buttonStyle(.pressable)
         .accessibilityAddTraits(isOn ? .isSelected : [])
+        .accessibilityHint(accessibilityHint ?? "")
     }
 }
 

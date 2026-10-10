@@ -15,6 +15,18 @@ final class SavedPlacesViewModel {
 
     var subtitle: String { folders.count == 1 ? "1 folder" : "\(folders.count) folders" }
 
+    /// Deletes a folder and its places. Returns a sentence to announce.
+    func delete(_ folder: PlaceFolder) async -> String {
+        do {
+            try await service.deleteFolder(folder.id)
+            folders.removeAll { $0.id == folder.id }
+            return "Deleted the \(folder.name) folder."
+        } catch {
+            Log.data.error("Couldn't delete folder: \(String(describing: error), privacy: .public)")
+            return "Couldn't delete \(folder.name). Try again."
+        }
+    }
+
     func load() async {
         do {
             folders = try await service.folders()
@@ -49,6 +61,18 @@ final class FolderViewModel {
     func load() async {
         places = (try? await service.places(in: folder.id)) ?? []
         isLoaded = true
+    }
+
+    /// Deletes this whole folder. Returns true when it's gone (so the screen can close).
+    func deleteFolder() async -> Bool {
+        do {
+            try await service.deleteFolder(folder.id)
+            await feedback.announce("Deleted the \(folder.name) folder.", priority: .info)
+            return true
+        } catch {
+            await feedback.announce("Couldn't delete \(folder.name). Try again.", priority: .info)
+            return false
+        }
     }
 
     func delete(_ saved: SavedPlace) async {

@@ -5,6 +5,7 @@ import Observation
 @Observable
 final class ColorIdentifyViewModel {
     private(set) var reading: ColorReading?
+    private(set) var cameraAvailable = true
 
     private let recognizer: any ColorRecognitionServicing
     private let feedback: FeedbackCenter
@@ -14,7 +15,14 @@ final class ColorIdentifyViewModel {
         self.feedback = feedback
     }
 
+    var previewSource: CameraPreviewSource { recognizer.previewSource }
+
     func run() async {
+        guard await recognizer.requestPermission() else {
+            cameraAvailable = false
+            await feedback.announce(AppError.permissionDenied(.camera).spokenMessage, priority: .info)
+            return
+        }
         await feedback.announce("Point the camera at something. I'll say its color.", priority: .info)
         for await next in recognizer.readings() {
             let changed = next.name != reading?.name

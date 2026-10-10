@@ -45,12 +45,13 @@ struct RouteView: View {
         .task {
             if model.route == nil { await model.load() }
         }
+        .task { await model.trackLocation() }
     }
 
     @ViewBuilder
     private var map: some View {
         if let route = model.route {
-            RouteMapView(route: route)
+            RouteMapView(route: route, currentLocation: model.currentLocation)
         } else {
             GridBackground(background: Palette.mapBackground, line: Palette.mapGridLine)
         }

@@ -232,6 +232,11 @@ final class SupabaseSavedPlacesService: SavedPlacesServicing {
     func deletePlace(_ id: UUID) async throws {
         try await client.from("saved_routes").delete().eq("id", value: id).execute()
     }
+
+    func deleteFolder(_ id: UUID) async throws {
+        // saved_routes rows go with it (foreign key ON DELETE CASCADE).
+        try await client.from("folders").delete().eq("id", value: id).execute()
+    }
 }
 
 final class SupabasePreferencesService: PreferencesServicing {
@@ -260,9 +265,14 @@ final class SupabasePreferencesService: PreferencesServicing {
 
     func save(_ preferences: UserPreferences) async throws {
         guard case .signedIn(let account) = auth.state else { return }
-        try await client
-            .from("preferences")
-            .upsert(PreferencesRow(preferences, userID: account.id), onConflict: "user_id")
-            .execute()
+        var row = PreferencesRow(preferences, userID: account.id)
+        do {
+            try await client.from("preferences").upsert(row, onConflict: "user_id").execute()
+        } catch where String(describing: error).contains("voice_id") {
+            // The database hasn't had the voice migration yet: save everything else.
+            Log.data.error("preferences.voice_id missing; run supabase/migrations/20261010000001_voice_preferences.sql")
+            row.voiceID = nil
+            try await client.from("preferences").upsert(row, onConflict: "user_id").execute()
+        }
     }
 }

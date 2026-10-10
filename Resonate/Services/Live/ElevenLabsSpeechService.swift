@@ -48,10 +48,39 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
 
     func selectVoice(_ id: String?) {
         guard voiceID != id else { return }
-        stop()
+        // Don't stop what's playing: choosing a voice also plays its sample, and stopping here cut it off.
+        // Anything spoken from now on uses the new voice.
         voiceID = id
         store = SpeechClipStore(voiceVersion: id ?? "matilda-v1")
         Task { await prewarm(SpeechPhrases.safety) }
+    }
+
+    /// True while a voice sample is playing or loading; background recording waits for it.
+    private var isPreviewing = false
+
+    func preview(_ text: String, voiceID: String?) async {
+        stop()
+        isPreviewing = true
+        let id = UUID()
+        workerID = id
+        isSpeaking = true
+        worker = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.workerID == id {
+                    self.isSpeaking = false
+                    self.worker = nil
+                    self.isPreviewing = false
+                }
+            }
+            do {
+                let data = try await self.fetch(text, timeout: 8, voiceID: voiceID)
+                if Task.isCancelled { return }
+                await self.playClips([data])
+            } catch {
+                if !Task.isCancelled { await self.speakOnDevice(text) }
+            }
+        }
     }
 
     func availableVoices() async throws -> [SpeechVoice] {
@@ -120,18 +149,12 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
         let missing = phrases.filter { !store.contains($0) }
         guard !missing.isEmpty else { return }
         Log.speech.notice("Recording \(missing.count) safety phrases in the app voice")
-        var index = 0
-        // A few at a time, to stay within ElevenLabs' concurrency limit.
-        while index < missing.count {
-            let batch = missing[index..<min(index + 3, missing.count)]
-            await withTaskGroup(of: Void.self) { group in
-                for phrase in batch {
-                    group.addTask { [self] in
-                        if let data = try? await self.fetch(phrase, timeout: 15, voiceID: voiceID) { store.store(data, for: phrase) }
-                    }
-                }
-            }
-            index += 3
+        // One at a time in the background, leaving ElevenLabs room for anything spoken now.
+        // Pauses while a voice sample plays, and stops if the voice changes again.
+        for phrase in missing {
+            while isPreviewing { try? await Task.sleep(for: .milliseconds(200)) }
+            guard self.voiceID == voiceID else { return }
+            if let data = try? await fetch(phrase, timeout: 15, voiceID: voiceID) { store.store(data, for: phrase) }
         }
         Log.speech.notice("Safety phrases ready: \(phrases.filter(store.contains).count)/\(phrases.count)")
     }

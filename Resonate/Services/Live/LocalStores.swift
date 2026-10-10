@@ -56,28 +56,72 @@ final class LocalSavedPlacesService: SavedPlacesServicing {
         try persist()
     }
 
+    func deleteFolder(_ id: UUID) async throws {
+        store.folders.removeAll { $0.id == id }
+        store.places.removeAll { $0.folderID == id }
+        try persist()
+    }
+
     private func persist() throws {
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(store).write(to: fileURL, options: [.atomic, .completeFileProtection])
     }
 }
 
-/// Preferences kept on the phone. Used for guests, and as an offline copy for signed-in users.
+/// Preferences kept on the phone, in a file written atomically on every change (so killing the app
+/// right after a change can't lose it). Used for guests, and as the working copy for signed-in users.
 final class LocalPreferencesService: PreferencesServicing {
-    private let defaults: UserDefaults
-    private let key = "preferences.v1"
-
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
+    private struct Stored: Codable {
+        var preferences: UserPreferences
+        /// True until Supabase confirms it has this version.
+        var needsSync: Bool
     }
 
-    func load() async -> UserPreferences? {
-        guard let data = defaults.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(UserPreferences.self, from: data)
+    private let fileURL: URL
+    private let legacyDefaults: UserDefaults
+    private let legacyKey = "preferences.v1"
+
+    init(fileURL: URL = URL.applicationSupportDirectory.appending(path: "preferences.json"),
+         legacyDefaults: UserDefaults = .standard) {
+        self.fileURL = fileURL
+        self.legacyDefaults = legacyDefaults
     }
+
+    func load() async -> UserPreferences? { stored()?.preferences }
 
     func save(_ preferences: UserPreferences) async throws {
-        defaults.set(try JSONEncoder().encode(preferences), forKey: key)
+        try write(Stored(preferences: preferences, needsSync: true))
+    }
+
+    /// Whether the phone has changes the account hasn't received yet.
+    var needsSync: Bool { stored()?.needsSync ?? false }
+
+    func markSynced() {
+        guard var current = stored(), current.needsSync else { return }
+        current.needsSync = false
+        try? write(current)
+    }
+
+    /// Replaces the phone copy with the account's (already in sync).
+    func replace(with preferences: UserPreferences) {
+        try? write(Stored(preferences: preferences, needsSync: false))
+    }
+
+    private func stored() -> Stored? {
+        if let data = try? Data(contentsOf: fileURL), let decoded = try? JSONDecoder().decode(Stored.self, from: data) {
+            return decoded
+        }
+        // Earlier versions kept preferences in UserDefaults.
+        if let data = legacyDefaults.data(forKey: legacyKey),
+           let preferences = try? JSONDecoder().decode(UserPreferences.self, from: data) {
+            return Stored(preferences: preferences, needsSync: true)
+        }
+        return nil
+    }
+
+    private func write(_ value: Stored) throws {
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(value).write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 }
 
@@ -107,15 +151,18 @@ final class AccountAwareSavedPlacesService: SavedPlacesServicing {
         try await active.save(place, routeSummary: routeSummary, to: folderID)
     }
     func deletePlace(_ id: UUID) async throws { try await active.deletePlace(id) }
+    func deleteFolder(_ id: UUID) async throws { try await active.deleteFolder(id) }
 }
 
-/// Always keeps a copy on the phone (so settings work offline) and syncs to Supabase when signed in.
+/// The phone copy is what the app runs on; Supabase keeps a copy for the account.
+/// Changes are saved on the phone first and marked "needs sync" until Supabase confirms them, so a
+/// failed sync (offline, server trouble, a missing column) can never roll settings back on next launch.
 final class AccountAwarePreferencesService: PreferencesServicing {
     private let auth: any AuthServicing
     private let remote: any PreferencesServicing
-    private let local: any PreferencesServicing
+    private let local: LocalPreferencesService
 
-    init(auth: any AuthServicing, remote: any PreferencesServicing, local: any PreferencesServicing) {
+    init(auth: any AuthServicing, remote: any PreferencesServicing, local: LocalPreferencesService) {
         self.auth = auth
         self.remote = remote
         self.local = local
@@ -123,25 +170,33 @@ final class AccountAwarePreferencesService: PreferencesServicing {
 
     func load() async -> UserPreferences? {
         guard case .signedIn = auth.state else { return await local.load() }
+        // Unsynced changes on the phone are newer than the account's copy: keep them and upload them.
+        if local.needsSync, let onPhone = await local.load() {
+            await upload(onPhone)
+            return onPhone
+        }
         if let saved = await remote.load() {
-            try? await local.save(saved)
+            local.replace(with: saved)
             return saved
         }
         // First sign-in after using the app as a guest: carry the choices over.
         guard let onPhone = await local.load() else { return nil }
-        try? await remote.save(onPhone)
+        await upload(onPhone)
         return onPhone
     }
 
-    /// The phone copy is what the app runs on, so only that failing is an error. A failed sync
-    /// (offline, server trouble) never blocks the user; `load()` uploads the phone copy next launch.
     func save(_ preferences: UserPreferences) async throws {
         try await local.save(preferences)
         guard case .signedIn = auth.state else { return }
+        await upload(preferences)
+    }
+
+    private func upload(_ preferences: UserPreferences) async {
         do {
             try await remote.save(preferences)
+            local.markSynced()
         } catch {
-            Log.data.error("Preferences saved on phone; sync to Supabase failed: \(String(describing: error), privacy: .public)")
+            Log.data.error("Preferences kept on phone; Supabase sync failed (will retry): \(String(describing: error), privacy: .public)")
         }
     }
 }

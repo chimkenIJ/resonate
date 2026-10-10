@@ -154,3 +154,42 @@ nonisolated struct Route: Identifiable, Codable, Hashable, Sendable {
         return "\(DurationText.spoken(durationSeconds)), \(access)"
     }
 }
+
+/// The steepest slope a route may use, in plain words.
+nonisolated enum HillLimit: Double, CaseIterable, Identifiable, Sendable {
+    case gentle = 0.04
+    case moderate = 0.08
+    case steep = 0.15
+
+    var id: Double { rawValue }
+    var incline: Double { rawValue }
+
+    /// The nearest option for a stored incline.
+    init(incline: Double) {
+        self = Self.allCases.min { abs($0.rawValue - incline) < abs($1.rawValue - incline) } ?? .moderate
+    }
+
+    var title: String {
+        switch self {
+        case .gentle: "Gentle"
+        case .moderate: "Moderate"
+        case .steep: "Steep"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .gentle: "Barely feels like a slope (up to 4%). Easiest on wheelchairs and tired legs; routes may be longer."
+        case .moderate: "About as steep as a wheelchair ramp (up to 8%). A good balance for most people."
+        case .steep: "Steep hills are fine (up to 15%). Shortest routes, but harder work."
+        }
+    }
+
+    var accent: Accent {
+        switch self {
+        case .gentle: .sage
+        case .moderate: .sand
+        case .steep: .clay
+        }
+    }
+}

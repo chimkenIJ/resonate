@@ -76,4 +76,9 @@ final class MockSavedPlacesService: SavedPlacesServicing {
             placesByFolder[key]?.removeAll { $0.id == id }
         }
     }
+
+    func deleteFolder(_ id: UUID) async throws {
+        folderList.removeAll { $0.id == id }
+        placesByFolder[id] = nil
+    }
 }

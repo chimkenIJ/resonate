@@ -42,9 +42,8 @@ struct AppServices {
 
     /// Everything real: accounts, saved places, location, search, routing, the ElevenLabs voice,
     /// voice input, obstacle detection, indoor scanning, Gemini descriptions, haptics, and tones.
-    /// Only color recognition is still a mock.
+    /// Color recognition too: every service is real.
     static func live(config: AppConfig) -> AppServices {
-        let mock = AppServices.mock()
         let auth = Auth0AuthService(config: config)
         let client = SupabaseClientFactory.make(config: config, auth: auth)
         let functions = EdgeFunctionClient(baseURL: config.functionsURL, apiKey: config.functionsKey, auth: auth)
@@ -72,7 +71,7 @@ struct AppServices {
                 ? LiDARObstacleDetectionService() : CameraObstacleDetectionService(),
             indoorScan: RoomScanService(),
             sceneDescription: GeminiSceneDescriptionService(client: functions),
-            colorRecognition: mock.colorRecognition
+            colorRecognition: LiveColorRecognitionService()
         )
     }
 

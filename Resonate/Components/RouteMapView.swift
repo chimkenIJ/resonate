@@ -19,10 +19,14 @@ struct RouteMapView: View {
                 .stroke(Accent.slate.color, style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
 
             if let currentLocation {
-                Annotation("Your location", coordinate: currentLocation.coordinate) {
-                    Circle().fill(.blue).frame(width: 18, height: 18)
-                        .overlay(Circle().stroke(.white, lineWidth: 3))
+                Annotation("Your location", coordinate: currentLocation.coordinate, anchor: .center) {
+                    ZStack {
+                        Circle().fill(Color.blue.opacity(0.25)).frame(width: 40, height: 40)
+                        Circle().fill(Color.blue).frame(width: 18, height: 18)
+                            .overlay(Circle().stroke(.white, lineWidth: 3))
+                    }
                 }
+                .annotationTitles(.hidden)
             }
             Annotation("Start", coordinate: start, anchor: .center) {
                 Circle()
@@ -61,7 +65,9 @@ struct RouteMapView: View {
             }
         }
         .onAppear { updateCamera() }
-        .onChange(of: currentLocation) { updateCamera() }
+        // Frame the route and the user once, when the first fix arrives; after that the dot moves on its own
+        // and the view stays put, so the whole route stays visible.
+        .onChange(of: currentLocation == nil) { updateCamera() }
         .onChange(of: route.id) { updateCamera() }
         .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll, showsTraffic: false))
         .mapControls {}
@@ -69,17 +75,12 @@ struct RouteMapView: View {
     }
 
     private func updateCamera() {
-        if let currentLocation {
-            position = .region(MKCoordinateRegion(center: currentLocation.coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.002, longitudeDelta: 0.002)))
-        } else {
-            position = .region(region)
-        }
+        position = .region(region)
     }
 
     /// Fits the whole route with some padding.
     private var region: MKCoordinateRegion {
-        let points = route.polyline + [route.destination.coordinate]
+        let points = route.polyline + [route.destination.coordinate] + (currentLocation.map { [$0] } ?? [])
         let lats = points.map(\.latitude)
         let lons = points.map(\.longitude)
         let minLat = lats.min() ?? 0, maxLat = lats.max() ?? 0

@@ -11,14 +11,24 @@ struct ColorIdentifyView: View {
 
     var body: some View {
         ZStack {
-            CameraBackdrop(scene: .room)
+            if model.previewSource.isLive {
+                CameraPreviewView(source: model.previewSource)
+                    .ignoresSafeArea()
+                    .accessibilityHidden(true)
+            } else {
+                CameraBackdrop(scene: .room)
+            }
 
-            // Aiming ring in the middle of the frame. Decoration only.
-            Circle()
-                .strokeBorder(Palette.textPrimary, lineWidth: 4)
-                .frame(width: 88, height: 88)
-                .overlay(Circle().fill(Palette.textPrimary).frame(width: 8, height: 8))
-                .offset(y: -120)
+            // Aiming ring at the exact middle of the camera view, where the color is read. Decoration only.
+            Color.clear
+                .overlay {
+                    Circle()
+                        .strokeBorder(Palette.textPrimary, lineWidth: 4)
+                        .frame(width: 88, height: 88)
+                        .overlay(Circle().fill(Palette.textPrimary).frame(width: 8, height: 8))
+                        .shadow(color: .black.opacity(0.6), radius: 3)
+                }
+                .ignoresSafeArea()
                 .accessibilityHidden(true)
 
             VStack(spacing: 0) {

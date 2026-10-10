@@ -4,6 +4,10 @@ import SwiftUI
 struct FolderView: View {
     @Environment(AppModel.self) private var app
     @State private var model: FolderViewModel
+    @State private var isEditing = false
+    @State private var placeToDelete: SavedPlace?
+    @State private var confirmingFolderDelete = false
+    @Environment(\.dismiss) private var dismiss
 
     init(model: FolderViewModel) {
         _model = State(initialValue: model)
@@ -12,7 +16,15 @@ struct FolderView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.sectionGap) {
-                BackButton(accessibilityLabel: "Back to saved places")
+                HStack {
+                    BackButton(accessibilityLabel: "Back to saved places")
+                    Spacer()
+                    IconCircleButton(systemImage: isEditing ? "checkmark" : "pencil",
+                                     accessibilityLabel: isEditing ? "Done editing" : "Edit this folder",
+                                     accessibilityHint: isEditing ? nil : "Shows delete buttons") {
+                        isEditing.toggle()
+                    }
+                }
 
                 HStack(spacing: 16) {
                     Image(systemName: model.folder.icon.systemImage)
@@ -32,17 +44,25 @@ struct FolderView: View {
 
                 VStack(spacing: 14) {
                     ForEach(model.places) { saved in
-                        PlaceRow(title: saved.place.name, subtitle: saved.routeSummary) {
-                            app.router.push(.route(saved.place))
-                        }
-                        .contextMenu {
-                            Button("Remove", systemImage: "trash", role: .destructive) {
-                                Task { await model.delete(saved) }
+                        HStack(spacing: 10) {
+                            PlaceRow(title: saved.place.name, subtitle: saved.routeSummary) {
+                                app.router.push(.route(saved.place))
+                            }
+                            if isEditing {
+                                DeleteButton(accessibilityLabel: "Delete \(saved.place.name)") { placeToDelete = saved }
                             }
                         }
-                        .accessibilityAction(named: "Remove") {
-                            Task { await model.delete(saved) }
+                        .contextMenu {
+                            Button("Delete", systemImage: "trash", role: .destructive) { placeToDelete = saved }
                         }
+                        .accessibilityAction(named: "Delete") { placeToDelete = saved }
+                    }
+                }
+
+                if isEditing {
+                    PillButton(title: "Delete this folder", systemImage: "trash", kind: .accent(.rose),
+                               accessibilityHint: "Deletes the folder and every place in it") {
+                        confirmingFolderDelete = true
                     }
                 }
             }
@@ -54,6 +74,22 @@ struct FolderView: View {
         .toolbar(.hidden, for: .navigationBar)
         .backOnEscape()
         .task { await model.load() }
+        .confirmationDialog(
+            placeToDelete.map { "Delete \($0.place.name)?" } ?? "",
+            isPresented: Binding(get: { placeToDelete != nil }, set: { if !$0 { placeToDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: placeToDelete
+        ) { saved in
+            Button("Delete", role: .destructive) { Task { await model.delete(saved) } }
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog("Delete \(model.folder.name) and its \(model.countText)?",
+                            isPresented: $confirmingFolderDelete, titleVisibility: .visible) {
+            Button("Delete folder", role: .destructive) {
+                Task { if await model.deleteFolder() { dismiss() } }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 }
 

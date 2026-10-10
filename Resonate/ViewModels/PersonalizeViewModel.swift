@@ -21,6 +21,24 @@ final class PersonalizeViewModel {
         voices = (try? await speech.availableVoices()) ?? []
     }
 
+    /// Matilda, the voice used when none is chosen.
+    static let defaultVoiceID = "XrExE9yKIg1WjnnlVkGX"
+
+    /// Short name of the chosen voice ("Matilda").
+    var currentVoiceName: String {
+        guard let voiceID, voiceID != Self.defaultVoiceID else { return "Matilda" }
+        return voices.first { $0.id == voiceID }.map { Self.shortName($0.name) } ?? "Chosen voice"
+    }
+
+    /// "Matilda - Knowledgable, Professional" → "Matilda".
+    static func shortName(_ name: String) -> String { name.components(separatedBy: " - ").first ?? name }
+
+    /// Plays a short sample in the chosen voice right away.
+    func preview(name: String, voiceID: String?, using speech: any SpeechServicing) async {
+        await speech.preview("Hi, I'm \(name). Bike ahead, slightly left, 2 meters. Step right to pass.",
+                             voiceID: voiceID ?? Self.defaultVoiceID)
+    }
+
     private var base: UserPreferences
     private let save: @MainActor (UserPreferences) async throws -> Void
 

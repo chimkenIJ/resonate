@@ -37,6 +37,7 @@ struct FeatureTile: View {
     let subtitle: String
     let systemImage: String
     let accent: Accent
+    var minHeight: CGFloat = Metrics.tileHeight
     let action: () -> Void
 
     var body: some View {
@@ -56,7 +57,7 @@ struct FeatureTile: View {
             }
             .padding(.horizontal, 22)
             .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, minHeight: Metrics.tileHeight, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: minHeight, maxHeight: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: Metrics.tileRadius).fill(Palette.surface))
             .overlay(RoundedRectangle(cornerRadius: Metrics.tileRadius).strokeBorder(accent.color, lineWidth: Metrics.borderWidth))
             .contentShape(RoundedRectangle(cornerRadius: Metrics.tileRadius))

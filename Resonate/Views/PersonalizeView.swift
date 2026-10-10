@@ -5,6 +5,7 @@ struct PersonalizeView: View {
     @Environment(AppModel.self) private var app
     @State private var model: PersonalizeViewModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var isChoosingVoice = false
 
     init(model: PersonalizeViewModel) {
         _model = State(initialValue: model)
@@ -19,15 +20,10 @@ struct PersonalizeView: View {
                     ScreenHeader(title: "Settings")
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("What should we help with?")
-                        .appFont(isOnboarding ? .onboardingTitle : .sectionTitle)
-                        .foregroundStyle(Palette.textPrimary)
-                        .accessibilityAddTraits(.isHeader)
-                    Text("Pick any. You can change this anytime.")
-                        .appFont(.body)
-                        .foregroundStyle(Palette.textSecondary)
-                }
+                Text("What should we help with?")
+                    .appFont(isOnboarding ? .onboardingTitle : .sectionTitle)
+                    .foregroundStyle(Palette.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
 
                 VStack(spacing: 10) {
                     ForEach(AssistNeed.allCases, id: \.self) { need in
@@ -51,33 +47,39 @@ struct PersonalizeView: View {
 
                 channelPicker
 
-                Text("Maps settings")
-                    .appFont(.sectionTitle)
-                    .accessibilityAddTraits(.isHeader)
-                Toggle("Avoid stairs", isOn: $model.routing.avoidSteps)
-                Toggle("Prefer tactile paving", isOn: $model.routing.preferTactilePaving)
-                Toggle("Prefer audible crossings", isOn: $model.routing.preferAudioSignals)
-                Picker("Maximum incline", selection: $model.routing.maxIncline) {
-                    Text("Gentle (4%)").tag(0.04)
-                    Text("Moderate (8%)").tag(0.08)
-                    Text("Steep (15%)").tag(0.15)
-                }
-                Text("Preferences depend on available map data. Check route warnings before walking.")
-                    .appFont(.footnote)
-                    .foregroundStyle(Palette.textSecondary)
-
-                Text("Voice")
-                    .appFont(.sectionTitle)
-                    .accessibilityAddTraits(.isHeader)
-                Picker("Speaking voice", selection: $model.voiceID) {
-                    Text("Default voice").tag(String?.none)
-                    ForEach(model.voices) { voice in
-                        Text(voice.name).tag(Optional(voice.id))
+                sectionTitle("Map settings")
+                row {
+                    ToggleTile(title: "Avoid stairs", accent: .clay, isOn: model.routing.avoidSteps,
+                               accessibilityHint: "Turns avoiding stairs on or off") {
+                        model.routing.avoidSteps.toggle()
+                    }
+                    ToggleTile(title: "Tactile paving", accent: .slate, isOn: model.routing.preferTactilePaving,
+                               accessibilityHint: "Prefers routes with bumpy curb strips you can feel") {
+                        model.routing.preferTactilePaving.toggle()
+                    }
+                    ToggleTile(title: "Audible crossings", accent: .mauve, isOn: model.routing.preferAudioSignals,
+                               accessibilityHint: "Prefers crossings with signals that beep or speak") {
+                        model.routing.preferAudioSignals.toggle()
                     }
                 }
-                if model.voices.isEmpty {
-                    Text("Connect to load available voices.").appFont(.footnote)
+
+                sectionTitle("How steep can hills be?")
+                row {
+                    ForEach(HillLimit.allCases) { limit in
+                        ToggleTile(title: limit.title, accent: limit.accent,
+                                   isOn: HillLimit(incline: model.routing.maxIncline) == limit,
+                                   accessibilityHint: limit.explanation) {
+                            model.routing.maxIncline = limit.incline
+                        }
+                    }
                 }
+
+                sectionTitle("Voice")
+                PlaceRow(title: model.currentVoiceName, subtitle: "Tap to hear and change the voice",
+                         accessibilityHint: "Opens the list of voices") {
+                    isChoosingVoice = true
+                }
+                .accessibilityLabel("Voice: \(model.currentVoiceName)")
 
 
                 if let message = model.message {
@@ -107,6 +109,27 @@ struct PersonalizeView: View {
         .background(Palette.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task { await model.loadVoices(using: app.services.speech) }
+        .sheet(isPresented: $isChoosingVoice) {
+            VoicePickerView(model: model)
+        }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .appFont(.sectionTitle)
+            .foregroundStyle(Palette.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+            .padding(.top, 4)
+    }
+
+    /// Side by side (1 | 2 | 3); stacked at the largest text sizes so nothing gets cut off.
+    @ViewBuilder
+    private func row<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 10))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 10))
+        layout { content() }
+            .fixedSize(horizontal: false, vertical: true) // equal heights when a label wraps
     }
 
     @ViewBuilder
