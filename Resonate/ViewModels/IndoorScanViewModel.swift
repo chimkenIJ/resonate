@@ -47,11 +47,14 @@ final class IndoorScanViewModel {
     }
 
     func run() async {
+        let generation = feedback.screenGeneration
         guard scanner.isSupported else {
             await feedback.announce(unsupportedMessage, priority: .info)
             return
         }
-        guard await scanner.requestPermission() else {
+        let granted = await scanner.requestPermission()
+        guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+        guard granted else {
             cameraAvailable = false
             await feedback.announce(AppError.permissionDenied(.camera).spokenMessage, priority: .info)
             return
@@ -60,6 +63,7 @@ final class IndoorScanViewModel {
             + "I'll tell you about doors and anything in your way.", priority: .navigation)
 
         for await next in scanner.snapshots() {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             snapshot = next
             let scene = IndoorComposer.compose(next.elements, pose: next.pose)
             self.scene = scene
@@ -131,6 +135,7 @@ final class IndoorScanViewModel {
         guard !isDescribing else { return }
         isDescribing = true
         defer { isDescribing = false }
+        let generation = feedback.screenGeneration
         if let intro {
             feedback.stopSpeech()
             await feedback.announce(intro, priority: .info)
@@ -141,10 +146,13 @@ final class IndoorScanViewModel {
         do {
             guard let jpeg = await scanner.latestFrameJPEG() else { throw AppError.server(message: "The camera isn't ready yet.") }
             let text = try await describer.describe(jpeg: jpeg, setting: setting)
+            // Left the screen while waiting: say nothing.
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             roomDescription = text
             await feedback.announce(text, priority: .snapshot)
             Task { await clearDescription(text) }
         } catch {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             if let failure { await feedback.announce(failure, priority: .info) }
         }
     }

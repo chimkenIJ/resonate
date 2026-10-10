@@ -8,6 +8,7 @@ struct VoicePickerView: View {
     let model: PersonalizeViewModel
     /// The voice being tried. Tapping only plays a sample; the ✓ button saves it.
     @State private var chosen: String?
+    @State private var previewTask: Task<Void, Never>?
 
     init(model: PersonalizeViewModel) {
         self.model = model
@@ -42,13 +43,19 @@ struct VoicePickerView: View {
         .background(Palette.background.ignoresSafeArea())
         .presentationBackground(Palette.background)
         .backOnEscape()
+        .onAppear { app.feedback.endScreenSpeech() }
+        .onDisappear {
+            previewTask?.cancel()
+            app.feedback.endScreenSpeech()
+        }
     }
 
     private func voiceButton(id: String?, name: String, detail: String) -> some View {
         let isSelected = (chosen ?? PersonalizeViewModel.defaultVoiceID) == (id ?? PersonalizeViewModel.defaultVoiceID)
         return SelectableCard(title: name, subtitle: detail, systemImage: "waveform", accent: .sand, isSelected: isSelected) {
             chosen = id
-            Task { await model.preview(name: name, voiceID: id, using: app.services.speech) }
+            previewTask?.cancel()
+            previewTask = Task { await model.preview(name: name, voiceID: id, using: app.services.speech) }
         }
         .accessibilityHint("Plays a sample. Tap the check mark to use this voice.")
     }

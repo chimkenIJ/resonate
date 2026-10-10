@@ -39,12 +39,12 @@ struct WalkView: View {
         HStack {
             BackButton(accessibilityLabel: model.backLabel, style: .floating)
             Spacer()
-            StatusPill(text: "Watching ahead", accent: .clay)
+            StatusPill(text: model.isStarting ? "Preparing to scan" : "Watching ahead", accent: .clay)
             Spacer()
             IconCircleButton(systemImage: "eye", accessibilityLabel: "Describe the whole scene", style: .floating) {
                 Task { await model.describeScene() }
             }
-            .disabled(model.isDescribing)
+            .disabled(model.isStarting || model.isDescribing)
         }
         .padding(.horizontal, Metrics.screenPadding)
         .padding(.top, 8)
@@ -83,6 +83,7 @@ struct WalkView: View {
                 PillButton(title: "Repeat", kind: .secondary, accessibilityHint: "Says the last message again") {
                     Task { await model.repeatLast() }
                 }
+                .disabled(model.isStarting)
                 if model.isNavigating {
                     PillButton(title: "Route", accessibilityHint: "Shows the whole route") {
                         dismiss()

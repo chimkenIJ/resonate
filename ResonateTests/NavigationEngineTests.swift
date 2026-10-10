@@ -37,6 +37,19 @@ private func sampleRoute(hazards: [RouteHazard] = []) -> Route {
 }
 
 struct NavigationEngineTests {
+    @Test func doesNotAnnounceATurnEightyMetersAwayAtStartup() {
+        var engine = NavigationEngine(route: sampleRoute())
+        #expect(engine.update(fix(north: 20, accuracy: 20)).isEmpty)
+        let events = engine.update(fix(north: 80))
+        guard case .approaching(let index, let distance)? = events.first else {
+            Issue.record("Expected a warning only when the turn is close")
+            return
+        }
+        #expect(index == 1)
+        #expect(abs(distance - 20) < 1)
+        #expect(engine.update(fix(north: 95)) == [.reached(stepIndex: 1)])
+    }
+
     @Test func announcesTheTurnOnceWhenApproaching() {
         var engine = NavigationEngine(route: sampleRoute())
         #expect(engine.update(fix(north: 50)).isEmpty)
@@ -211,6 +224,96 @@ struct NavigationEngineTests {
         #expect(engine.update(fix(north: 45)) == [.hazardAhead(curb)])
         #expect(engine.update(fix(north: 50)).isEmpty)
         #expect(engine.announcement(for: .hazardAhead(curb)) == "Raised curb ahead. Watch the edge.")
+    }
+}
+
+@MainActor
+struct WalkStartupTests {
+    final class HeldSpeech: SpeechServicing {
+        var isSpeaking = false
+        var lastSpoken: String?
+        private var completion: CheckedContinuation<Void, Never>?
+        var isWaiting: Bool { completion != nil }
+        func speak(_ text: String, priority: SpeechPriority, fragments: [String]?) async {
+            isSpeaking = true
+            lastSpoken = text
+        }
+        func waitUntilFinished() async {
+            await withCheckedContinuation { completion = $0 }
+        }
+        func finish() {
+            isSpeaking = false
+            let saved = completion
+            completion = nil
+            saved?.resume()
+        }
+        func stop() { lastSpoken = nil; finish() }
+        func repeatLast() async {}
+        func prewarm(_ phrases: [String]) async {}
+    }
+
+    @Test func scanningWaitsUntilTheStartupSpeechFinishes() async throws {
+        let services = AppServices.mock()
+        let speech = HeldSpeech()
+        let feedback = FeedbackCenter(speech: speech, haptics: services.haptics,
+                                      tones: services.tones, preferences: UserPreferences())
+        let model = WalkViewModel(mode: .navigating(sampleRoute()), services: services, feedback: feedback)
+        let task = Task { await model.run() }
+        defer { task.cancel(); speech.stop() }
+        let deadline = Date().addingTimeInterval(2)
+        while !speech.isWaiting, Date() < deadline { await Task.yield() }
+        #expect(speech.isWaiting)
+        #expect(model.isStarting)
+        #expect(model.objects.isEmpty)
+        #expect(model.currentLocation == nil)
+        speech.finish()
+        let startedDeadline = Date().addingTimeInterval(2)
+        while model.currentLocation == nil, Date() < startedDeadline { await Task.yield() }
+        #expect(!model.isStarting)
+        #expect(model.currentLocation != nil)
+        task.cancel()
+        await task.value
+    }
+
+    @Test func closingDuringStartupNeverStartsScanning() async {
+        let services = AppServices.mock()
+        let speech = HeldSpeech()
+        let feedback = FeedbackCenter(speech: speech, haptics: services.haptics,
+                                      tones: services.tones, preferences: UserPreferences())
+        let model = WalkViewModel(mode: .navigating(sampleRoute()), services: services, feedback: feedback)
+        let task = Task { await model.run() }
+        let deadline = Date().addingTimeInterval(2)
+        while !speech.isWaiting, Date() < deadline { await Task.yield() }
+        #expect(speech.isWaiting)
+        feedback.endScreenSpeech()
+        await task.value
+        #expect(model.objects.isEmpty)
+        #expect(model.currentLocation == nil)
+    }
+
+    @Test func startsWithBeginningRouteAndScanningInsteadOfRepeatingRouteDetails() async throws {
+        let services = AppServices.mock()
+        let app = AppModel(services: services)
+        let location = try #require(services.location as? MockLocationService)
+        location.location = point(north: 20)
+        let speech = try #require(services.speech as? MockSpeechService)
+        var route = sampleRoute()
+        route.features = [.curbRamps, .audioCrossings, .unverifiedSegments]
+        route.steps[0].spokenInstruction = "Walk north. Then turn right."
+        let model = WalkViewModel(mode: .navigating(route), services: services, feedback: app.feedback)
+        let task = Task { await model.run() }
+        while model.currentLocation == nil { await Task.yield() }
+        task.cancel()
+        await task.value
+        let announcements = speech.log.filter { $0.priority == .navigation }.map(\.text)
+        #expect(announcements.count == 1)
+        let message = try #require(announcements.first)
+        #expect(message.hasPrefix("Beginning route. "))
+        #expect(!message.contains("2 minutes"))
+        #expect(!message.contains("Curb ramps"))
+        #expect(message.contains("Beginning to scan the area. Point the phone in front of you."))
+        #expect(!message.lowercased().contains("turn right"))
+        #expect(model.navigation?.stepIndex == 0)
     }
 }
 

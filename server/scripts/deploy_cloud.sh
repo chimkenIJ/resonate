@@ -2,9 +2,9 @@
 # Moves Resonate's server to the hosted Supabase project, so the app works on cellular with the Mac off.
 #
 #   Edge Functions  → hosted Supabase (free tier)
-#   Database        → hosted Supabase: schema migrations + OSM accessibility points and entrances
+#   Database        → hosted Supabase: schema migrations + OSM accessibility points, entrances, places
 #   Walking routes  → Stadia Maps' hosted Valhalla (free tier, same engine as the local container)
-#   Addresses       → Stadia Maps' hosted geocoder (OSM data; public Nominatim blocks cloud servers)
+#   Place search    → the osm_places table in the hosted database
 #   Voice, scenes   → ElevenLabs and Gemini, keys copied from supabase/functions/.env.local
 #
 # Usage: fill in server/.env.cloud (see server/.env.cloud.example), then
@@ -33,18 +33,20 @@ if [[ "$STEP" == "all" ]]; then
 
   echo "→ OSM accessibility points and entrances…"
   server/scripts/load_access_points.sh "$SUPABASE_DB_URL"
+
+  echo "→ Named places for search…"
+  server/scripts/load_places.sh "$SUPABASE_DB_URL"
 fi
 
 echo "→ Function secrets…"
 secrets="$(mktemp)"
 trap 'rm -f "$secrets"' EXIT
 # Keys from local development, minus the local-only routing address.
-grep -E '^(ELEVENLABS_API_KEY|ELEVENLABS_VOICE_ID|GEMINI_API_KEY|GEMINI_MODEL|NOMINATIM_URL|UPSTREAM_USER_AGENT)=' \
+grep -E '^(ELEVENLABS_API_KEY|ELEVENLABS_VOICE_ID|GEMINI_API_KEY|GEMINI_MODEL|UPSTREAM_USER_AGENT)=' \
   supabase/functions/.env.local > "$secrets"
 {
   echo "VALHALLA_URL=https://api.stadiamaps.com"
   echo "VALHALLA_API_KEY=$STADIA_API_KEY"
-  echo "STADIA_API_KEY=$STADIA_API_KEY"
 } >> "$secrets"
 npx supabase secrets set --project-ref "$PROJECT_REF" --env-file "$secrets" > /dev/null
 echo "  set: $(cut -d= -f1 "$secrets" | tr '\n' ' ')"

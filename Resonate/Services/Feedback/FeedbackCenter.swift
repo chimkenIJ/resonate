@@ -10,6 +10,7 @@ final class FeedbackCenter {
 
     var preferences: UserPreferences { didSet { speech.selectVoice(preferences.voiceID) } }
     private(set) var currentAlert: ObstacleAlert?
+    private(set) var screenGeneration = 0
 
     private var lastAlertKey: String?
     private var lastAlertTime: Date = .distantPast
@@ -26,6 +27,7 @@ final class FeedbackCenter {
     /// Delivers a safety alert. Returns false if it was suppressed as a repeat.
     @discardableResult
     func deliver(_ alert: ObstacleAlert, now: Date = .now) async -> Bool {
+        guard !Task.isCancelled else { return false }
         let isRepeat = alert.dedupeKey == lastAlertKey
             && now.timeIntervalSince(lastAlertTime) < repeatInterval
             && alert.severity <= (currentAlert?.severity ?? .info)
@@ -47,6 +49,7 @@ final class FeedbackCenter {
     /// Walking: something very close in the path or coming fast. One stop buzz and a short phrase that
     /// interrupts anything playing (pre-recorded pieces, so no network wait).
     func deliverUrgent(_ alert: ObstacleAlert) async {
+        guard !Task.isCancelled else { return }
         currentAlert = alert
         let channels = preferences.alertChannels
         if channels.contains(.buzzes) { haptics.play(.stop) }
@@ -56,13 +59,13 @@ final class FeedbackCenter {
 
     /// Walking: the periodic "what's ahead" summary. No buzz, and never spoken over anything else.
     func speakSummary(_ alert: ObstacleAlert) async {
-        guard preferences.alertChannels.contains(.voice), !speech.isSpeaking else { return }
+        guard !Task.isCancelled, preferences.alertChannels.contains(.voice), !speech.isSpeaking else { return }
         await speech.speak(alert.spokenText, priority: .navigation, fragments: alert.fragments)
     }
 
     /// A spoken update made of pre-recorded pieces, so it plays instantly and offline once recorded.
     func say(_ fragments: [String], priority: SpeechPriority = .navigation) async {
-        guard preferences.alertChannels.contains(.voice), !fragments.isEmpty else { return }
+        guard !Task.isCancelled, preferences.alertChannels.contains(.voice), !fragments.isEmpty else { return }
         await speech.speak(fragments.joined(separator: " "), priority: priority, fragments: fragments)
     }
 
@@ -75,6 +78,7 @@ final class FeedbackCenter {
 
     /// Speaks a navigation or info message, plus a turn buzz if the user wants buzzes.
     func announce(_ text: String, priority: SpeechPriority = .navigation, haptic: HapticCue? = nil) async {
+        guard !Task.isCancelled else { return }
         if let haptic, preferences.alertChannels.contains(.buzzes) { haptics.play(haptic) }
         if preferences.alertChannels.contains(.voice) || priority == .info {
             await speech.speak(text, priority: priority)
@@ -83,6 +87,7 @@ final class FeedbackCenter {
 
     /// Speaks `text` only the first time `key` is seen on this phone (one-time notices).
     func announceOnce(key: String, _ text: String) async {
+        guard !Task.isCancelled else { return }
         let defaultsKey = "notice.\(key)"
         guard !UserDefaults.standard.bool(forKey: defaultsKey) else { return }
         UserDefaults.standard.set(true, forKey: defaultsKey)
@@ -91,7 +96,20 @@ final class FeedbackCenter {
 
     func stopSpeech() { speech.stop() }
 
+    func waitForSpeech() async {
+        guard !Task.isCancelled else { return }
+        await speech.waitUntilFinished()
+    }
+
+    func endScreenSpeech() {
+        screenGeneration += 1
+        lastAlertKey = nil
+        currentAlert = nil
+        stopSpeech()
+    }
+
     func repeatLast() async {
+        guard !Task.isCancelled else { return }
         await speech.repeatLast()
     }
 }

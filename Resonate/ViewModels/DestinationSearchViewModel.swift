@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import Observation
 
-/// Voice or text search for a destination. Shows and reads aloud the closest 3–5 results.
+/// Voice or text search for a destination. Shows the closest 3–5 results.
 @Observable
 final class DestinationSearchViewModel {
     enum Phase: Equatable {
@@ -10,8 +10,17 @@ final class DestinationSearchViewModel {
         case failed(String)
     }
 
-    var query = ""
+    var query = "" {
+        didSet {
+            requestVersion += 1
+            if !isListening {
+                results = []
+                phase = .idle
+            }
+        }
+    }
     private(set) var results: [Place] = []
+    private(set) var recentSearches: [String] = []
     private(set) var phase: Phase = .idle
 
     let resultLimit = 5
@@ -19,18 +28,44 @@ final class DestinationSearchViewModel {
     private let recognizer: any SpeechRecognitionServicing
     private let geocoding: any GeocodingServicing
     private let location: any LocationServicing
-    private let feedback: FeedbackCenter
+    private let auth: any AuthServicing
+    private let defaults: UserDefaults
+    private var requestVersion = 0
     private var listenTask: Task<Void, Never>?
     private var handledListenRequest = 0
 
-    init(services: AppServices, feedback: FeedbackCenter) {
+    init(services: AppServices, defaults: UserDefaults = .standard) {
         self.recognizer = services.speechRecognition
         self.geocoding = services.geocoding
         self.location = services.location
-        self.feedback = feedback
+        self.auth = services.auth
+        self.defaults = defaults
+        refreshHistory()
     }
 
     var isListening: Bool { phase == .listening }
+
+    private var historyKey: String {
+        if case .signedIn(let user) = auth.state { return "search.history.\(user.id)" }
+        return "search.history.guest"
+    }
+
+    func refreshHistory() {
+        recentSearches = defaults.stringArray(forKey: historyKey) ?? []
+    }
+
+    var matchingRecentSearches: [String] {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? recentSearches : recentSearches.filter { $0.localizedCaseInsensitiveContains(text) }
+    }
+
+    private func rememberSearch(_ text: String) {
+        refreshHistory()
+        recentSearches.removeAll { $0.caseInsensitiveCompare(text) == .orderedSame }
+        recentSearches.insert(text, at: 0)
+        recentSearches = Array(recentSearches.prefix(20))
+        defaults.set(recentSearches, forKey: historyKey)
+    }
 
     /// Home's "Where do you want to go?" sends a request; each one is handled once.
     func handleListenRequest(_ request: Int) {
@@ -63,23 +98,32 @@ final class DestinationSearchViewModel {
 
     func search() async {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty, phase != .searching else { return }
+        guard text.count <= 200 else {
+            fail(.server(message: "Use a place name up to 200 characters."))
+            return
+        }
+        requestVersion += 1
+        let version = requestVersion
+        rememberSearch(text)
         phase = .searching
         do {
             let here = try await currentLocation(timeout: 8)
             guard GeorgiaRegion.contains(here) else { throw AppError.outsideGeorgia }
-            results = try await geocoding.search(text, near: here, limit: resultLimit)
+            let matches = try await geocoding.search(text, near: here, limit: resultLimit)
+            guard version == requestVersion, !Task.isCancelled else { return }
+            results = matches
             phase = .results
-            await feedback.announce(spokenResults, priority: .info)
         } catch {
+            guard version == requestVersion, !Task.isCancelled else { return }
             results = []
-            await fail((error as? AppError) ?? .server(message: "Search isn't working right now. Try again in a moment."))
+            fail((error as? AppError) ?? .server(message: "Search isn't working right now. Try again in a moment."))
         }
     }
 
     private func listen() async {
         guard await recognizer.requestAuthorization() else {
-            await fail(.permissionDenied(.speechRecognition))
+            fail(.permissionDenied(.speechRecognition))
             return
         }
         query = ""
@@ -95,20 +139,19 @@ final class DestinationSearchViewModel {
             // something, search for that instead of throwing it away.
             Log.data.error("Speech recognition ended with: \(String(describing: error), privacy: .public)")
             if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                await fail(.server(message: "I didn't catch that. Tap the microphone and try again."))
+                fail(.server(message: "I didn't catch that. Tap the microphone and try again."))
                 return
             }
         }
         guard !Task.isCancelled else { return }
         if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            phase = .idle
-            await feedback.announce("I didn't hear a place. Tap the microphone to try again.", priority: .info)
+            fail(.server(message: "I didn't hear a place. Tap the microphone to try again."))
         } else {
             await search()
         }
     }
 
-    /// The user's location, or a spoken error if GPS doesn't answer in time (indoors, no signal).
+    /// The user's location, or an error if GPS doesn't answer in time (indoors, no signal).
     private func currentLocation(timeout seconds: Double) async throws -> GeoPoint {
         let location = location
         return try await withThrowingTaskGroup(of: GeoPoint.self) { group in
@@ -122,18 +165,7 @@ final class DestinationSearchViewModel {
         }
     }
 
-    private func fail(_ error: AppError) async {
+    private func fail(_ error: AppError) {
         phase = .failed(error.spokenMessage)
-        await feedback.announce(error.spokenMessage, priority: .info)
-    }
-
-    /// "Found 3 places, closest first. 1: Kroger, 1.4 kilometers away. ..."
-    var spokenResults: String {
-        let intro = results.count == 1 ? "Found 1 place." : "Found \(results.count) places, closest first."
-        let items = results.enumerated().map { index, place in
-            let distance = place.distanceMeters.map { ", \(DistanceText.spoken($0)) away" } ?? ""
-            return "\(index + 1): \(place.name)\(distance)."
-        }
-        return ([intro] + items).joined(separator: " ")
     }
 }

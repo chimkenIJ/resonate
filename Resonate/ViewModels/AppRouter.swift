@@ -66,9 +66,14 @@ enum CoverRoute: Identifiable, Hashable {
 /// Navigation state: selected tab, each tab's stack, and the camera cover.
 @Observable
 final class AppRouter {
-    var tab: AppTab = .home
-    var paths: [AppTab: [AppRoute]] = [:]
-    var cover: CoverRoute?
+    var tab: AppTab = .home { didSet { if tab != oldValue { onNavigate() } } }
+    var paths: [AppTab: [AppRoute]] = [:] { didSet { if paths != oldValue { onNavigate() } } }
+    var cover: CoverRoute? { didSet { if cover != oldValue { onNavigate() } } }
+    private let onNavigate: @MainActor () -> Void
+
+    init(onNavigate: @escaping @MainActor () -> Void = {}) {
+        self.onNavigate = onNavigate
+    }
     /// Incremented to ask the search screen to start listening.
     private(set) var listenRequest = 0
 

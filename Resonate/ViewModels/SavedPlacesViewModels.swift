@@ -65,23 +65,33 @@ final class FolderViewModel {
 
     /// Deletes this whole folder. Returns true when it's gone (so the screen can close).
     func deleteFolder() async -> Bool {
+        let generation = feedback.screenGeneration
         do {
             try await service.deleteFolder(folder.id)
-            await feedback.announce("Deleted the \(folder.name) folder.", priority: .info)
+            if generation == feedback.screenGeneration {
+                await feedback.announce("Deleted the \(folder.name) folder.", priority: .info)
+            }
             return true
         } catch {
-            await feedback.announce("Couldn't delete \(folder.name). Try again.", priority: .info)
+            if generation == feedback.screenGeneration {
+                await feedback.announce("Couldn't delete \(folder.name). Try again.", priority: .info)
+            }
             return false
         }
     }
 
     func delete(_ saved: SavedPlace) async {
+        let generation = feedback.screenGeneration
         do {
             try await service.deletePlace(saved.id)
             places.removeAll { $0.id == saved.id }
-            await feedback.announce("Removed \(saved.place.name).", priority: .info)
+            if generation == feedback.screenGeneration {
+                await feedback.announce("Removed \(saved.place.name).", priority: .info)
+            }
         } catch {
-            await feedback.announce("Couldn't remove \(saved.place.name).", priority: .info)
+            if generation == feedback.screenGeneration {
+                await feedback.announce("Couldn't remove \(saved.place.name).", priority: .info)
+            }
         }
     }
 }
@@ -107,15 +117,22 @@ final class SaveToFolderViewModel {
 
     /// Returns true when saved, so the sheet can close.
     func save(to folder: PlaceFolder) async -> Bool {
+        let generation = feedback.screenGeneration
         do {
             _ = try await service.save(place, routeSummary: nil, to: folder.id)
-            await feedback.announce("Saved \(place.name) to \(folder.name).", priority: .info)
+            if generation == feedback.screenGeneration {
+                await feedback.announce("Saved \(place.name) to \(folder.name).", priority: .info)
+            }
             return true
         } catch {
-            await feedback.announce("Couldn't save \(place.name). Try again.", priority: .info)
+            if generation == feedback.screenGeneration {
+                await feedback.announce("Couldn't save \(place.name). Try again.", priority: .info)
+            }
             return false
         }
     }
+
+    func stopSpeech() { feedback.endScreenSpeech() }
 }
 
 @Observable

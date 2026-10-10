@@ -36,6 +36,7 @@ final class EdgeFunctionClient {
 
     /// Raw response body (for audio).
     func postForData<Body: Encodable & Sendable>(_ function: String, body: Body, timeout: TimeInterval = 20) async throws -> Data {
+        try Task.checkCancellation()
         var request = URLRequest(url: baseURL.appending(path: function))
         request.httpMethod = "POST"
         request.timeoutInterval = timeout
@@ -45,6 +46,7 @@ final class EdgeFunctionClient {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         request.httpBody = try JSONEncoder.snakeCase.encode(body)
+        try Task.checkCancellation()
 
         let data: Data
         let response: URLResponse

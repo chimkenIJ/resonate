@@ -20,7 +20,12 @@ final class MockSpeechService: SpeechServicing {
         isSpeaking = false
     }
 
-    func stop() { isSpeaking = false }
+    func waitUntilFinished() async {}
+
+    func stop() {
+        isSpeaking = false
+        lastSpoken = nil
+    }
 
     func repeatLast() async {
         guard let lastSpoken else { return }

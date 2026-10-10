@@ -53,6 +53,7 @@ final class WalkViewModel {
     private(set) var isRerouting = false
     private(set) var sceneDescription: String?
     private(set) var isDescribing = false
+    private(set) var isStarting = true
 
     private let detection: any ObstacleDetectionServicing
     private let location: any LocationServicing
@@ -101,11 +102,12 @@ final class WalkViewModel {
     /// What the sheet shows: a stop alert first, otherwise the summary when something is worth knowing.
     private var shown: ObstacleAlert? { alert ?? summary.flatMap { $0.severity > .info ? $0 : nil } }
 
-    var tagText: String { shown?.severity.label ?? (isRerouting ? "Rerouting" : "All clear") }
+    var tagText: String { isStarting ? "Starting" : shown?.severity.label ?? (isRerouting ? "Rerouting" : "All clear") }
     var tagAccent: Accent { shown?.severity.accent ?? (isRerouting ? .sand : .sage) }
     var deliveryText: String { feedback.preferences.deliveryDescription(for: alert?.severity ?? .headsUp) }
 
     var headline: String {
+        if isStarting { return "Preparing to scan." }
         // Climbing: a steady message instead of re-reading each step.
         if alert == nil, narrator.isOnStairs { return "On the stairs." }
         if let shown { return shown.headline }
@@ -116,6 +118,7 @@ final class WalkViewModel {
     }
 
     var guidance: String {
+        if isStarting { return "Point the phone in front of you when scanning begins." }
         if alert == nil, narrator.isOnStairs { return "Hold the railing and take it one step at a time." }
         if let shown { return shown.guidance }
         if navigation?.isWrongWay == true { return "Turn around. The route is behind you." }
@@ -170,23 +173,32 @@ final class WalkViewModel {
     // MARK: Running
 
     func run() async {
-        if let route {
-            await feedback.announce("Walking to \(route.destination.name). \(route.spokenSummary).", priority: .navigation)
-        } else {
-            await feedback.announce("Watching ahead. I'll warn you about obstacles.", priority: .navigation)
-        }
-        async let obstacles: Void = watchObstacles()
-        async let directions: Void = followRoute()
+        isStarting = true
+        let generation = feedback.screenGeneration
+        let granted = await detection.requestPermission()
+        guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+        cameraAvailable = granted
+        let overview = isNavigating ? "Beginning route. " : ""
+        // Which way to face first ("Turn left."), so the walk starts in the route's direction.
+        var facing = ""
+        if let route, let turn = await startOrientation(for: route) { facing = "\(turn) " }
+        guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+        let scanning = granted
+            ? "Beginning to scan the area. Point the phone in front of you."
+            : AppError.permissionDenied(.camera).spokenMessage + (isNavigating ? " Directions still work." : "")
+        await feedback.announce(overview + facing + scanning, priority: .navigation)
+        await feedback.waitForSpeech()
+        guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+        isStarting = false
+        async let obstacles: Void = watchObstacles(generation: generation)
+        async let directions: Void = followRoute(generation: generation)
         _ = await (obstacles, directions)
     }
 
-    private func watchObstacles() async {
-        guard await detection.requestPermission() else {
-            cameraAvailable = false
-            await feedback.announce(AppError.permissionDenied(.camera).spokenMessage + " Directions still work.", priority: .navigation)
-            return
-        }
+    private func watchObstacles(generation: Int) async {
+        guard cameraAvailable, generation == feedback.screenGeneration, !Task.isCancelled else { return }
         for await frame in detection.frames() {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             let now = Date.now
             // Things that belong together are one (a person with a bag, a cyclist, a group of people).
             var grouped = frame
@@ -251,40 +263,42 @@ final class WalkViewModel {
         }
     }
 
-    private func followRoute() async {
-        guard let route = navigation?.route, route.steps.first != nil else {
-            await watchLocation()
+    private func followRoute(generation: Int) async {
+        guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+        guard navigation != nil else {
+            await watchLocation(generation: generation)
             return
         }
-        await feedback.announce(await startInstruction(for: route), priority: .navigation)
 
         for await fix in location.updates() {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             noteLocation(fix)
             guard var engine = navigation, !engine.hasArrived else { break }
             currentLocation = fix.point
             let events = engine.update(fix)
             navigation = engine
             for event in events {
+                guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
                 await handle(event, engine: engine, at: fix)
             }
         }
     }
 
     /// Free walking: location only decides when "Find door" shows.
-    private func watchLocation() async {
+    private func watchLocation(generation: Int) async {
         guard await location.requestAuthorization() else { return }
         for await fix in location.updates() {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             noteLocation(fix)
             currentLocation = fix.point
         }
     }
 
-    /// The first instruction, with which way to turn to face the route: "Turn left. Walk on Peachtree Street."
-    private func startInstruction(for route: Route) async -> String {
-        guard let first = route.steps.first else { return "" }
-        guard let bearing = route.initialBearing, let heading = await currentHeading(),
-              let turn = RouteWording.orientation(heading: heading, routeBearing: bearing) else { return first.spoken }
-        return "\(turn) \(first.spoken)"
+    /// Which way to turn to face the way the route starts ("Turn left."), or nil when already facing it
+    /// or the compass doesn't answer.
+    private func startOrientation(for route: Route) async -> String? {
+        guard let bearing = route.initialBearing, let heading = await currentHeading() else { return nil }
+        return RouteWording.orientation(heading: heading, routeBearing: bearing)
     }
 
     /// Which way the phone faces, or nil if the compass doesn't answer within 2 seconds.
@@ -326,6 +340,7 @@ final class WalkViewModel {
     }
 
     private func reroute(from point: GeoPoint) async {
+        let generation = feedback.screenGeneration
         guard let destination = route?.destination, !isRerouting,
               Date.now.timeIntervalSince(lastRerouteAt) >= rerouteInterval else { return }
         isRerouting = true
@@ -333,9 +348,13 @@ final class WalkViewModel {
         defer { isRerouting = false }
         do {
             let fresh = try await routing.route(from: point, to: destination, preferences: routingPreferences)
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             navigation = NavigationEngine(route: fresh)
-            await feedback.announce("New route. \(await startInstruction(for: fresh))", priority: .navigation)
+            let facing = await startOrientation(for: fresh).map { "\($0) " } ?? ""
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+            await feedback.announce("New route. \(facing)\(fresh.spokenOverview)", priority: .navigation)
         } catch {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             let message = (error as? AppError)?.spokenMessage ?? "I couldn't find a new route. Keep to a safe spot and try again."
             await feedback.announce(message, priority: .navigation)
         }
@@ -379,16 +398,20 @@ final class WalkViewModel {
         isDescribing = true
         defer { isDescribing = false }
         feedback.stopSpeech()
+        let generation = feedback.screenGeneration
         await feedback.announce(intro, priority: .info)
         // Give the user a moment to point the phone at the building.
         if setting == .door { try? await Task.sleep(for: .seconds(2)) }
         do {
             guard let jpeg = await detection.latestFrameJPEG() else { throw AppError.server(message: "The camera isn't ready yet.") }
             let text = try await describer.describe(jpeg: jpeg, setting: setting)
+            // Left the screen while waiting: say nothing.
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             sceneDescription = text
             await feedback.announce(text, priority: .snapshot)
             Task { await clearDescription(text) }
         } catch {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             await feedback.announce(failure, priority: .info)
         }
     }
