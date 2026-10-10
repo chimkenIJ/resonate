@@ -12,13 +12,19 @@ nonisolated enum SpeechPhrases {
         phrases.formUnion(["Curb drop", "Drop-off", "Step up", "Obstacle", TerrainAnalyzer.stairsUpLabel, TerrainAnalyzer.stairsDownLabel])
         phrases.formUnion(SceneGrouping.labels)
         phrases.formUnion(["Wall", "Door", "Doorway", "Chair", "Table", "Couch", "Bed", "Cabinet", "Fridge", "Stove",
-                           "Oven", "Sink", "Dishwasher", "Washer", "Toilet", "Bathtub", "Fireplace", "TV", "Stairs", "Object"])
+                           "Oven", "Sink", "Dishwasher", "Washer", "Toilet", "Bathtub", "Fireplace", "TV", "Stairs", "Object", "Person", "People", "Animal", "Bag"])
 
         // Where.
         let directions: [RelativeDirection] = [.left, .slightlyLeft, .ahead, .slightlyRight, .right]
         phrases.formUnion(directions.map { "\($0.spoken)," })
         phrases.insert("right in front of you.")
-        phrases.formUnion((1...3).map { "\(IndoorComposer.steps(Double($0) * IndoorComposer.stepLength)) ahead." })
+        // Indoors: "Door" "5 steps" "ahead, on your left." and how to turn.
+        phrases.formUnion((1...IndoorComposer.maxSteps).map { IndoorComposer.steps(Double($0) * IndoorComposer.stepLength) })
+        phrases.formUnion(stride(from: -180.0, through: 180, by: 5).map { "\(IndoorComposer.phrase(for: $0))." })
+        phrases.formUnion(stride(from: -180.0, through: 180, by: 5).map { IndoorComposer.turn(toward: $0).text })
+        phrases.formUnion(["Clear ahead.", "It's closed.", "It's open.", "You're at the door.", "You're at the doorway.",
+                           "Walk straight through.", "Found a door.", "I haven't found a door yet.", "I lost the door.",
+                           "Turn slowly, and I'll tell you when I see one.", "Stopped guiding.", "Find the railing."])
 
         // How far (alerts and summaries only mention things within about 20 feet).
         phrases.formUnion(stride(from: 0.1, through: 6.5, by: 0.02).map { "\(DistanceText.spoken($0))." })
@@ -37,8 +43,7 @@ nonisolated enum SpeechPhrases {
         // What to do (indoors).
         phrases.formUnion([
             "Step right to pass.", "Step left to pass.",
-            "Turn left or right.", "Stairs. Find the railing and check each step with your cane.",
-            IndoorComposer.closedDoorGuidance,
+            "Turn left or right.", IndoorComposer.closedDoorGuidance,
         ])
 
         // Navigation phrases that should also work offline.

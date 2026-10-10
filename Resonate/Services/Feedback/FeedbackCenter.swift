@@ -60,6 +60,12 @@ final class FeedbackCenter {
         await speech.speak(alert.spokenText, priority: .navigation, fragments: alert.fragments)
     }
 
+    /// A spoken update made of pre-recorded pieces, so it plays instantly and offline once recorded.
+    func say(_ fragments: [String], priority: SpeechPriority = .navigation) async {
+        guard preferences.alertChannels.contains(.voice), !fragments.isEmpty else { return }
+        await speech.speak(fragments.joined(separator: " "), priority: priority, fragments: fragments)
+    }
+
     /// Walking: one light tap when the nearest thing in the path gets closer. The only routine buzz.
     func proximityPulse() {
         let channels = preferences.alertChannels
