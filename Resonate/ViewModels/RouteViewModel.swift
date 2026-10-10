@@ -33,16 +33,20 @@ final class RouteViewModel {
     }
 
     func load() async {
+        let generation = feedback.screenGeneration
         state = .loading
         do {
             let origin = try await location.currentLocation()
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             guard GeorgiaRegion.contains(origin), GeorgiaRegion.contains(place.coordinate) else {
                 throw AppError.outsideGeorgia
             }
             let route = try await routing.route(from: origin, to: place, preferences: preferences)
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             state = .loaded(route)
             await feedback.announce(spokenOverview(route), priority: .info)
         } catch {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             let message = ((error as? AppError) ?? .noRoute).spokenMessage
             state = .failed(message)
             await feedback.announce(message, priority: .info)

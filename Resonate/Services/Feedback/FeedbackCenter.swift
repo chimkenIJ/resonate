@@ -10,6 +10,7 @@ final class FeedbackCenter {
 
     var preferences: UserPreferences { didSet { speech.selectVoice(preferences.voiceID) } }
     private(set) var currentAlert: ObstacleAlert?
+    private(set) var screenGeneration = 0
 
     private var lastAlertKey: String?
     private var lastAlertTime: Date = .distantPast
@@ -26,6 +27,7 @@ final class FeedbackCenter {
     /// Delivers a safety alert. Returns false if it was suppressed as a repeat.
     @discardableResult
     func deliver(_ alert: ObstacleAlert, now: Date = .now) async -> Bool {
+        guard !Task.isCancelled else { return false }
         let isRepeat = alert.dedupeKey == lastAlertKey
             && now.timeIntervalSince(lastAlertTime) < repeatInterval
             && alert.severity <= (currentAlert?.severity ?? .info)
@@ -44,6 +46,7 @@ final class FeedbackCenter {
 
     /// Speaks a navigation or info message, plus a turn buzz if the user wants buzzes.
     func announce(_ text: String, priority: SpeechPriority = .navigation, haptic: HapticCue? = nil) async {
+        guard !Task.isCancelled else { return }
         if let haptic, preferences.alertChannels.contains(.buzzes) { haptics.play(haptic) }
         if preferences.alertChannels.contains(.voice) || priority == .info {
             await speech.speak(text, priority: priority)
@@ -52,6 +55,7 @@ final class FeedbackCenter {
 
     /// Speaks `text` only the first time `key` is seen on this phone (one-time notices).
     func announceOnce(key: String, _ text: String) async {
+        guard !Task.isCancelled else { return }
         let defaultsKey = "notice.\(key)"
         guard !UserDefaults.standard.bool(forKey: defaultsKey) else { return }
         UserDefaults.standard.set(true, forKey: defaultsKey)
@@ -60,7 +64,15 @@ final class FeedbackCenter {
 
     func stopSpeech() { speech.stop() }
 
+    func endScreenSpeech() {
+        screenGeneration += 1
+        lastAlertKey = nil
+        currentAlert = nil
+        stopSpeech()
+    }
+
     func repeatLast() async {
+        guard !Task.isCancelled else { return }
         await speech.repeatLast()
     }
 }

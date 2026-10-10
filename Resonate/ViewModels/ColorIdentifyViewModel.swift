@@ -18,13 +18,17 @@ final class ColorIdentifyViewModel {
     var previewSource: CameraPreviewSource { recognizer.previewSource }
 
     func run() async {
-        guard await recognizer.requestPermission() else {
+        let generation = feedback.screenGeneration
+        let granted = await recognizer.requestPermission()
+        guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+        guard granted else {
             cameraAvailable = false
             await feedback.announce(AppError.permissionDenied(.camera).spokenMessage, priority: .info)
             return
         }
         await feedback.announce("Point the camera at something. I'll say its color.", priority: .info)
         for await next in recognizer.readings() {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             let changed = next.name != reading?.name
             reading = next
             if changed { await feedback.announce(next.name, priority: .info) }

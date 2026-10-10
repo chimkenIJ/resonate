@@ -27,6 +27,7 @@ until curl -fs http://127.0.0.1:8002/status >/dev/null; do sleep 5; done
 
 echo "→ Local Supabase (database + functions gateway)…"
 npx --yes supabase start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,logflare,vector,supavisor >/dev/null
+npx supabase migration up --local --include-all >/dev/null
 
 COUNT=$(docker exec supabase_db_resonate psql -U postgres -d postgres -tAc "select count(*) from public.osm_access_points" 2>/dev/null || echo 0)
 if [[ "${COUNT:-0}" -eq 0 ]]; then
@@ -35,6 +36,11 @@ if [[ "${COUNT:-0}" -eq 0 ]]; then
 fi
 
 echo "→ Edge Functions (geocode, route)…"
+PLACES_COUNT=$(docker exec supabase_db_resonate psql -U postgres -d postgres -tAc "select count(*) from public.osm_places" 2>/dev/null || echo 0)
+if [[ "${PLACES_COUNT:-0}" -eq 0 ]]; then
+  server/scripts/load_places.sh
+fi
+
 pkill -f "supabase functions serve" 2>/dev/null || true
 nohup npx supabase functions serve --env-file supabase/functions/.env.local --no-verify-jwt >"$LOG" 2>&1 &
 KEY=$(npx supabase status -o json 2>/dev/null | python3 -c "import sys,json;print(json.load(sys.stdin)['PUBLISHABLE_KEY'])")

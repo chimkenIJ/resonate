@@ -63,6 +63,7 @@ struct SavedPlacesView: View {
         .background(GridBackground())
         .toolbar(.hidden, for: .navigationBar)
         .task { await model.load() }
+        .onChange(of: isAddingFolder) { _, _ in app.feedback.endScreenSpeech() }
         .confirmationDialog(
             folderToDelete.map { "Delete \($0.name) and its \($0.countText)?" } ?? "",
             isPresented: Binding(get: { folderToDelete != nil }, set: { if !$0 { folderToDelete = nil } }),
@@ -71,8 +72,11 @@ struct SavedPlacesView: View {
         ) { folder in
             Button("Delete folder", role: .destructive) {
                 Task {
+                    let generation = app.feedback.screenGeneration
                     let message = await model.delete(folder)
-                    await app.feedback.announce(message, priority: .info)
+                    if generation == app.feedback.screenGeneration {
+                        await app.feedback.announce(message, priority: .info)
+                    }
                     if model.folders.isEmpty { isEditing = false }
                 }
             }
@@ -80,8 +84,11 @@ struct SavedPlacesView: View {
         }
         .sheet(isPresented: $isAddingFolder) {
             AddFolderView(model: AddFolderViewModel(service: app.services.savedPlaces)) { folder in
+                let generation = app.feedback.screenGeneration
                 await model.load()
-                await app.feedback.announce("Made the \(folder.name) folder.", priority: .info)
+                if generation == app.feedback.screenGeneration {
+                    await app.feedback.announce("Made the \(folder.name) folder.", priority: .info)
+                }
             }
         }
     }

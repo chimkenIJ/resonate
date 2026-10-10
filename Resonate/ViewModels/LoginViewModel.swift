@@ -21,12 +21,14 @@ final class LoginViewModel {
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
+        let generation = feedback.screenGeneration
         do {
             let user = try await auth.signIn()
             await onAuthenticated(.signedIn(user))
         } catch is CancellationError {
             // The user closed the login sheet; nothing to say.
         } catch {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             let message = "Sign in didn't finish. Try again, or continue without an account."
             errorMessage = message
             await feedback.announce(message, priority: .info)

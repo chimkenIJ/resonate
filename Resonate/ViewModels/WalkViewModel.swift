@@ -79,23 +79,27 @@ final class WalkViewModel {
     // MARK: Running
 
     func run() async {
+        let generation = feedback.screenGeneration
         if let route {
             await feedback.announce("Walking to \(route.destination.name). \(route.spokenSummary).", priority: .navigation)
         } else {
             await feedback.announce("Watching ahead. I'll warn you about obstacles.", priority: .navigation)
         }
-        async let obstacles: Void = watchObstacles()
-        async let directions: Void = followRoute()
+        async let obstacles: Void = watchObstacles(generation: generation)
+        async let directions: Void = followRoute(generation: generation)
         _ = await (obstacles, directions)
     }
 
-    private func watchObstacles() async {
-        guard await detection.requestPermission() else {
+    private func watchObstacles(generation: Int) async {
+        let granted = await detection.requestPermission()
+        guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+        guard granted else {
             cameraAvailable = false
             await feedback.announce(AppError.permissionDenied(.camera).spokenMessage + " Directions still work.", priority: .navigation)
             return
         }
         for await frame in detection.frames() {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             objects = frame.objects
             imageSize = frame.imageSize
             if let next = ObstacleAlertComposer.compose(from: frame.objects) {
@@ -107,16 +111,19 @@ final class WalkViewModel {
         }
     }
 
-    private func followRoute() async {
+    private func followRoute(generation: Int) async {
+        guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
         guard let first = navigation?.route.steps.first else { return }
         await feedback.announce(first.spoken, priority: .navigation)
 
         for await fix in location.updates() {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             guard var engine = navigation, !engine.hasArrived else { break }
             currentLocation = fix.point
             let events = engine.update(fix)
             navigation = engine
             for event in events {
+                guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
                 await handle(event, engine: engine, at: fix)
             }
         }
@@ -140,6 +147,7 @@ final class WalkViewModel {
     }
 
     private func reroute(from point: GeoPoint) async {
+        let generation = feedback.screenGeneration
         guard let destination = route?.destination, !isRerouting,
               Date.now.timeIntervalSince(lastRerouteAt) >= rerouteInterval else { return }
         isRerouting = true
@@ -147,10 +155,12 @@ final class WalkViewModel {
         defer { isRerouting = false }
         do {
             let fresh = try await routing.route(from: point, to: destination, preferences: routingPreferences)
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             navigation = NavigationEngine(route: fresh)
             let first = fresh.steps.first.map { " \($0.spoken)" } ?? ""
             await feedback.announce("New route.\(first)", priority: .navigation)
         } catch {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             let message = (error as? AppError)?.spokenMessage ?? "I couldn't find a new route. Keep to a safe spot and try again."
             await feedback.announce(message, priority: .navigation)
         }
@@ -175,13 +185,16 @@ final class WalkViewModel {
         isDescribing = true
         defer { isDescribing = false }
         feedback.stopSpeech()
+        let generation = feedback.screenGeneration
         await feedback.announce("Looking around.", priority: .info)
         do {
             guard let jpeg = await detection.latestFrameJPEG() else { throw AppError.server(message: "The camera isn't ready yet.") }
             let text = try await describer.describe(jpeg: jpeg, setting: .outdoor)
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             sceneDescription = text
             await feedback.announce(text, priority: .snapshot)
         } catch {
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             await feedback.announce("I couldn't describe the scene right now.", priority: .info)
         }
     }
