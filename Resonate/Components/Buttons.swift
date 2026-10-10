@@ -37,6 +37,7 @@ struct IconCircleButton: View {
         }
         .buttonStyle(.pressable)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityRemoveTraits(.isButton)
         .accessibilityHint(accessibilityHint ?? "")
     }
 
@@ -109,6 +110,7 @@ struct PillButton: View {
         }
         .buttonStyle(.pressable)
         .accessibilityLabel(accessibilityLabel ?? title)
+        .accessibilityRemoveTraits(.isButton)
         .accessibilityHint(accessibilityHint ?? "")
     }
 

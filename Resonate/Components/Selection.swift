@@ -10,6 +10,7 @@ struct SelectableCard: View {
     let action: () -> Void
 
     @ScaledMetric(relativeTo: .headline) private var badge: CGFloat = 48
+    @AccessibilityFocusState private var isAccessibilityFocused: Bool
 
     var body: some View {
         Button(action: action) {
@@ -38,7 +39,20 @@ struct SelectableCard: View {
             .contentShape(RoundedRectangle(cornerRadius: Metrics.optionRadius))
         }
         .buttonStyle(.pressable)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityLabel(spokenLabel)
+        .accessibilityHint("")
+        .accessibilityRemoveTraits([.isButton, .isSelected])
+        .accessibilityFocused($isAccessibilityFocused)
+        .onChange(of: isSelected) { _, _ in
+            if isAccessibilityFocused {
+                AccessibilityNotification.Announcement(spokenLabel).post()
+            }
+        }
+    }
+
+    private var spokenLabel: String {
+        let state = "\(title) \(isSelected ? "on" : "off")"
+        return subtitle.isEmpty ? state : "\(state). \(subtitle)"
     }
 
     private var checkmark: some View {
@@ -65,6 +79,8 @@ struct ToggleTile: View {
     var accessibilityHint: String? = nil
     let action: () -> Void
 
+    @AccessibilityFocusState private var isAccessibilityFocused: Bool
+
     var body: some View {
         Button(action: action) {
             Text(title)
@@ -85,8 +101,21 @@ struct ToggleTile: View {
                 .contentShape(RoundedRectangle(cornerRadius: Metrics.innerRadius))
         }
         .buttonStyle(.pressable)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
-        .accessibilityHint(accessibilityHint ?? "")
+        .accessibilityLabel(spokenLabel)
+        .accessibilityHint("")
+        .accessibilityRemoveTraits([.isButton, .isSelected])
+        .accessibilityFocused($isAccessibilityFocused)
+        .onChange(of: isOn) { _, _ in
+            if isAccessibilityFocused {
+                AccessibilityNotification.Announcement(spokenLabel).post()
+            }
+        }
+    }
+
+    private var spokenLabel: String {
+        let state = "\(title) \(isOn ? "on" : "off")"
+        guard let summary = accessibilityHint, !summary.isEmpty else { return state }
+        return "\(state). \(summary)"
     }
 }
 

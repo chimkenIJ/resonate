@@ -49,12 +49,11 @@ struct PersonalizeView: View {
 
                 sectionTitle("Map settings")
                 row {
-                    ToggleTile(title: "Avoid stairs", accent: .clay, isOn: model.routing.avoidSteps,
-                               accessibilityHint: "Turns avoiding stairs on or off") {
+                    ToggleTile(title: "Avoid stairs", accent: .clay, isOn: model.routing.avoidSteps) {
                         model.routing.avoidSteps.toggle()
                     }
                     ToggleTile(title: "Tactile paving", accent: .slate, isOn: model.routing.preferTactilePaving,
-                               accessibilityHint: "Prefers routes with bumpy curb strips you can feel") {
+                               accessibilityHint: "Prefers routes with tactile paving you can feel") {
                         model.routing.preferTactilePaving.toggle()
                     }
                     ToggleTile(title: "Audible crossings", accent: .mauve, isOn: model.routing.preferAudioSignals,

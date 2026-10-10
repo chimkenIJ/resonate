@@ -63,6 +63,7 @@ struct FeatureTile: View {
             .contentShape(RoundedRectangle(cornerRadius: Metrics.tileRadius))
         }
         .buttonStyle(.pressable)
+        .accessibilityRemoveTraits(.isButton)
     }
 }
 
@@ -105,7 +106,7 @@ struct VoiceSearchCard: View {
         .buttonStyle(.pressable)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(isListening ? "Listening. Say a place." : "\(title) \(subtitle)")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityRemoveTraits(.isButton)
     }
 }
 
@@ -147,7 +148,7 @@ struct FolderCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(folder.name), \(folder.countText)")
         .accessibilityHint("Opens this folder")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityRemoveTraits(.isButton)
     }
 
     /// Tab and paper sheets peeking out of the folder. Decoration only.
@@ -211,6 +212,7 @@ struct PlaceRow: View {
         }
         .buttonStyle(.pressable)
         .accessibilityHint(accessibilityHint)
+        .accessibilityRemoveTraits(.isButton)
     }
 }
 

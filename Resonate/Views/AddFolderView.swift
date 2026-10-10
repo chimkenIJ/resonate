@@ -55,8 +55,8 @@ struct AddFolderView: View {
                                     .overlay(Circle().strokeBorder(isSelected ? Palette.textPrimary : .clear, lineWidth: 3))
                             }
                             .buttonStyle(.pressable)
-                            .accessibilityLabel(accent.spokenName)
-                            .accessibilityAddTraits(isSelected ? .isSelected : [])
+                            .accessibilityLabel("\(accent.spokenName) \(isSelected ? "on" : "off")")
+                            .accessibilityRemoveTraits([.isButton, .isSelected])
                         }
                     }
                 }
@@ -73,8 +73,8 @@ struct AddFolderView: View {
                                     .background(Circle().fill(isSelected ? model.accent.color : Palette.surfaceRaised))
                             }
                             .buttonStyle(.pressable)
-                            .accessibilityLabel(icon.spokenName)
-                            .accessibilityAddTraits(isSelected ? .isSelected : [])
+                            .accessibilityLabel("\(icon.spokenName) \(isSelected ? "on" : "off")")
+                            .accessibilityRemoveTraits([.isButton, .isSelected])
                         }
                     }
                 }

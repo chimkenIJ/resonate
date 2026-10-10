@@ -50,6 +50,6 @@ struct VoicePickerView: View {
             chosen = id
             Task { await model.preview(name: name, voiceID: id, using: app.services.speech) }
         }
-        .accessibilityHint("Plays a sample. Tap the check mark to use this voice.")
+        .accessibilityHint("Plays a voice sample")
     }
 }

@@ -71,7 +71,7 @@ private struct FolderPickRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(folder.name), \(folder.countText)")
         .accessibilityHint("Saves the place here")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityRemoveTraits(.isButton)
     }
 }
 

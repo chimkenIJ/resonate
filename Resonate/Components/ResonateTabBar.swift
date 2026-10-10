@@ -48,8 +48,8 @@ struct ResonateTabBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.pressable)
-        .accessibilityLabel(tab.title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityLabel("\(tab.title) \(isSelected ? "on" : "off")")
+        .accessibilityRemoveTraits([.isButton, .isSelected])
         .accessibilityShowsLargeContentViewer {
             Image(systemName: tab.selectedIcon)
             Text(tab.title)
@@ -71,6 +71,7 @@ struct ResonateTabBar: View {
         .frame(maxWidth: .infinity)
         .offset(y: -20)
         .accessibilityLabel("Camera")
+        .accessibilityRemoveTraits(.isButton)
         .accessibilityHint("Starts watching for obstacles ahead")
         .accessibilityShowsLargeContentViewer {
             Image(systemName: "camera.fill")
