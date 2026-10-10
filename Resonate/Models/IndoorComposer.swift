@@ -108,6 +108,9 @@ nonisolated enum IndoorComposer {
         if let door = placed.filter({ isDoorway($0) && $0.nearest.x > 0 && $0.distance <= 10 })
             .min(by: { $0.distance < $1.distance }) {
             parts.append(doorSentence(door))
+        } else if let door = placed.filter({ isClosedDoor($0) && $0.distance <= 6 && abs($0.bearing) <= 60 })
+            .min(by: { $0.distance < $1.distance }) {
+            parts.append(door.distance <= 1.5 ? closedDoorGuidance : "Closed door \(sideways(door.bearing)).")
         }
 
         return Result(
@@ -139,6 +142,17 @@ nonisolated enum IndoorComposer {
     private static func isDoorway(_ item: Placed) -> Bool {
         if case .door(let open) = item.element.kind { return open }
         return item.element.kind == .opening
+    }
+
+    private static func isClosedDoor(_ item: Placed) -> Bool {
+        if case .door(let open) = item.element.kind { return !open }
+        return false
+    }
+
+    static let closedDoorGuidance = "The door is closed. Find the handle to open it."
+
+    private static func sideways(_ bearing: Double) -> String {
+        abs(bearing) <= 20 ? "ahead" : "ahead, a little to the \(bearing < 0 ? "left" : "right")"
     }
 
     /// A wall roughly parallel to the walking direction, close beside the user.
@@ -175,6 +189,8 @@ nonisolated enum IndoorComposer {
         let guidance: String
         if isStairs {
             guidance = "Stairs. Find the railing and check each step with your cane."
+        } else if isClosedDoor(closest) {
+            guidance = closedDoorGuidance
         } else if closest.element.kind == .wall {
             guidance = "Turn left or right."
         } else {

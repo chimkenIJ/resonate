@@ -30,6 +30,16 @@ nonisolated struct GeoPoint: Codable, Hashable, Sendable {
         return earthRadius * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
 
+    /// Compass bearing to `other` in degrees (0 = north, 90 = east).
+    func bearing(to other: GeoPoint) -> Double {
+        let lat1 = latitude * .pi / 180, lat2 = other.latitude * .pi / 180
+        let dLon = (other.longitude - longitude) * .pi / 180
+        let y = sin(dLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+        let degrees = atan2(y, x) * 180 / .pi
+        return degrees < 0 ? degrees + 360 : degrees
+    }
+
     /// Meters to the closest point on the segment a–b. Uses a flat projection, accurate at walking scale.
     func distance(toSegmentFrom a: GeoPoint, to b: GeoPoint) -> Double {
         let metersPerDegreeLat = 111_320.0

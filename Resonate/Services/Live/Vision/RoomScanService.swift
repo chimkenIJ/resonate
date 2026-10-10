@@ -86,7 +86,8 @@ final class RoomScanService: IndoorScanServicing {
         let people = await Task.detached(priority: .userInitiated) {
             FrameAnalysis.objects(from: detector.detect(in: pixelBuffer, orientation: .right).filter {
                 ["person", "dog", "cat", "suitcase", "backpack", "potted plant"].contains($0.identifier)
-            }, depth: { _ in nil }, focalLengthPixels: focal, imageHeightPixels: Double(resolution.width))
+            }, depth: { _ in nil }, focalLengthPixels: focal, imageHeightPixels: Double(resolution.width),
+               imageWidthPixels: Double(resolution.height))
         }.value
 
         var all = elements

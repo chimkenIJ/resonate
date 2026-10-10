@@ -6,7 +6,10 @@
 //   destination: { latitude, longitude, name? },
 //   preferences?: { avoid_steps?, max_incline?, prefer_tactile_paving?, prefer_audio_signals? }
 // }
-// 200  { route: { duration_s, distance_m, is_step_free, relaxed, polyline, steps, features, avoided, hazards } }
+// 200  { route: { duration_s, distance_m, is_step_free, relaxed, polyline, steps, features, avoided, hazards, entrance } }
+//
+// When OSM maps an entrance near the destination, the route ends at that door (main entrance
+// first) instead of the middle of the building, and `entrance` describes it.
 // 404  { error: "no_route" }   422 { error: "outside_georgia" }
 
 import { corsHeaders, error, isFiniteNumber, json, readJSON, upstream } from "../_shared/http.ts";
@@ -27,7 +30,7 @@ interface ValhallaManeuver {
   instruction: string;
   verbal_pre_transition_instruction?: string;
   verbal_transition_alert_instruction?: string;
-  length: number; // kilometers
+  length: number; // miles (directions are in US units, so spoken text says feet and miles)
   time: number;
   begin_shape_index: number;
 }
@@ -44,7 +47,10 @@ interface AccessFeature {
   distance_m: number;
 }
 
+const METERS_PER_MILE = 1609.344;
+
 interface RouteEdge { use: string; begin_shape_index: number }
+interface Entrance { latitude: number; longitude: number; entrance: string | null; door: string | null; distance_m: number }
 
 /** Valhalla maneuver type → app Maneuver raw value. */
 function maneuverName(type: number): string {
@@ -99,12 +105,12 @@ Deno.serve(async (req) => {
     return error("bad_request", "Send origin and destination coordinates.", 400);
   }
   const origin = { lat: o.latitude as number, lon: o.longitude as number };
-  const dest = { lat: d.latitude as number, lon: d.longitude as number };
+  let dest = { lat: d.latitude as number, lon: d.longitude as number };
   if (!inGeorgia(origin.lat, origin.lon) || !inGeorgia(dest.lat, dest.lon)) {
     return error("outside_georgia", OUTSIDE_GEORGIA_MESSAGE, 422);
   }
   if (haversine(origin.lat, origin.lon, dest.lat, dest.lon) > 40_000) {
-    return error("no_route", "That's more than 40 kilometers away, too far to walk. Try somewhere closer.", 404);
+    return error("no_route", "That's more than 25 miles away, too far to walk. Try somewhere closer.", 404);
   }
 
   const base = Deno.env.get("VALHALLA_URL");
@@ -112,6 +118,10 @@ Deno.serve(async (req) => {
   const prefs = body?.preferences ?? {};
 
   try {
+    // End at the building's door when OSM knows where it is.
+    const entrance = (await rpc<Entrance[]>("nearest_entrance", { p_latitude: dest.lat, p_longitude: dest.lon, p_radius_m: 60 }))?.[0] ?? null;
+    if (entrance) dest = { lat: entrance.latitude, lon: entrance.longitude };
+
     let relaxed = false;
     let trip = await valhallaRoute(base, origin, dest, prefs, false);
     if (!trip) {
@@ -152,8 +162,9 @@ Deno.serve(async (req) => {
         instruction: m.instruction.replace(/\.$/, ""),
         spoken_instruction: note ? `${spoken} ${note}` : spoken,
         alert_instruction: m.verbal_transition_alert_instruction ?? null,
-        distance_m: Math.round(m.length * 1000),
+        distance_m: Math.round(m.length * METERS_PER_MILE),
         maneuver: maneuverName(m.type),
+        shape_index: Math.min(m.begin_shape_index, shape.length - 1),
         latitude,
         longitude,
       };
@@ -175,7 +186,7 @@ Deno.serve(async (req) => {
     return json({
       route: {
         duration_s: Math.round(trip.summary.time),
-        distance_m: Math.round(trip.summary.length * 1000),
+        distance_m: Math.round(trip.summary.length * METERS_PER_MILE),
         is_step_free: stepsOnRoute === 0,
         relaxed,
         polyline: shape,
@@ -194,6 +205,13 @@ Deno.serve(async (req) => {
             return { kind: "steps", latitude, longitude, fraction: index / Math.max(shape.length - 1, 1) };
           }),
         ].sort((a, b) => a.fraction - b.fraction),
+        // Street crossings on the route, so walk signals are only read out where the user will cross.
+        crossings: (access ?? [])
+          .filter((f) => f.kind === "crossing" && f.distance_m <= 6)
+          .map(({ latitude, longitude, fraction }) => ({ latitude, longitude, fraction })),
+        entrance: entrance
+          ? { latitude: entrance.latitude, longitude: entrance.longitude, is_main: entrance.entrance === "main", door: entrance.door }
+          : null,
       },
     });
   } catch (e) {
@@ -219,7 +237,7 @@ async function valhallaRoute(
       ],
       costing: "pedestrian",
       costing_options: costing(prefs, relaxed),
-      directions_options: { units: "kilometers", language: "en-US" },
+      directions_options: { units: "miles", language: "en-US" },
     }),
   });
   if (res.status === 400) return null; // Valhalla: no path for these settings

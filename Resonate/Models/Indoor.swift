@@ -31,6 +31,8 @@ nonisolated struct IndoorSnapshot: Sendable {
 
 nonisolated enum SceneSetting: String, Codable, Sendable {
     case outdoor, indoor
+    /// Where the door is, whether it's open, and how to open it.
+    case door
 }
 
 /// Result of the color recognition module.

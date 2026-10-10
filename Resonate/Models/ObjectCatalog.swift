@@ -11,34 +11,38 @@ nonisolated enum ObjectCatalog {
     }
 
     /// COCO class name → entry. Classes not listed (cups, phones, ties…) are ignored.
+    /// Names are deliberately general: YOLO often flips between similar classes (car / truck,
+    /// chair / bench, dog / cat), and the user only needs to know what kind of thing is in the way.
     static let entries: [String: Entry] = [
         "person": Entry(label: "Person", category: .person, typicalHeight: 1.7),
         "bicycle": Entry(label: "Bike", category: .vehicle, typicalHeight: 1.0),
-        "car": Entry(label: "Car", category: .vehicle, typicalHeight: 1.5),
-        "motorcycle": Entry(label: "Motorcycle", category: .vehicle, typicalHeight: 1.1),
-        "bus": Entry(label: "Bus", category: .vehicle, typicalHeight: 3.0),
-        "truck": Entry(label: "Truck", category: .vehicle, typicalHeight: 3.0),
-        "train": Entry(label: "Train", category: .vehicle, typicalHeight: 3.5),
-        "traffic light": Entry(label: "Traffic light", category: .sign, typicalHeight: 0.9),
-        "stop sign": Entry(label: "Stop sign", category: .sign, typicalHeight: 0.75),
-        "fire hydrant": Entry(label: "Fire hydrant", category: .obstacle, typicalHeight: 0.7),
-        "parking meter": Entry(label: "Parking meter", category: .obstacle, typicalHeight: 1.4),
-        "bench": Entry(label: "Bench", category: .furniture, typicalHeight: 0.8),
+        "motorcycle": Entry(label: "Bike", category: .vehicle, typicalHeight: 1.1),
+        "car": Entry(label: "Vehicle", category: .vehicle, typicalHeight: 1.5),
+        "bus": Entry(label: "Vehicle", category: .vehicle, typicalHeight: 3.0),
+        "truck": Entry(label: "Vehicle", category: .vehicle, typicalHeight: 2.5),
+        "train": Entry(label: "Vehicle", category: .vehicle, typicalHeight: 3.5),
+        "stop sign": Entry(label: "Sign", category: .sign, typicalHeight: 0.75),
+        "fire hydrant": Entry(label: "Post", category: .obstacle, typicalHeight: 0.7),
+        "parking meter": Entry(label: "Post", category: .obstacle, typicalHeight: 1.4),
+        "bench": Entry(label: "Seat", category: .furniture, typicalHeight: 0.8),
+        "chair": Entry(label: "Seat", category: .furniture, typicalHeight: 0.9),
+        "couch": Entry(label: "Seat", category: .furniture, typicalHeight: 0.85),
         "potted plant": Entry(label: "Planter", category: .obstacle, typicalHeight: 0.8),
-        "dog": Entry(label: "Dog", category: .obstacle, typicalHeight: 0.5),
-        "cat": Entry(label: "Cat", category: .obstacle, typicalHeight: 0.3),
-        "suitcase": Entry(label: "Suitcase", category: .obstacle, typicalHeight: 0.6),
-        "skateboard": Entry(label: "Skateboard", category: .obstacle, typicalHeight: 0.15),
-        "chair": Entry(label: "Chair", category: .furniture, typicalHeight: 0.9),
-        "couch": Entry(label: "Couch", category: .furniture, typicalHeight: 0.85),
+        "dog": Entry(label: "Animal", category: .obstacle, typicalHeight: 0.5),
+        "cat": Entry(label: "Animal", category: .obstacle, typicalHeight: 0.3),
+        "suitcase": Entry(label: "Bag", category: .obstacle, typicalHeight: 0.6),
+        "backpack": Entry(label: "Bag", category: .obstacle, typicalHeight: 0.5),
+        "skateboard": Entry(label: "Obstacle", category: .obstacle, typicalHeight: 0.15),
         "dining table": Entry(label: "Table", category: .furniture, typicalHeight: 0.75),
         "bed": Entry(label: "Bed", category: .furniture, typicalHeight: 0.6),
         "toilet": Entry(label: "Toilet", category: .furniture, typicalHeight: 0.75),
         "refrigerator": Entry(label: "Fridge", category: .furniture, typicalHeight: 1.7),
     ]
 
-    /// Minimum detection confidence to report.
-    static let minimumConfidence: Float = 0.4
+    /// Minimum detection confidence to report. High enough that guesses don't get announced.
+    static let minimumConfidence: Float = 0.5
+    /// Traffic lights are only used to read walk signals, which are small; accept weaker detections.
+    static let signalConfidence: Float = 0.3
 
     static func entry(for identifier: String) -> Entry? {
         entries[identifier.lowercased()]

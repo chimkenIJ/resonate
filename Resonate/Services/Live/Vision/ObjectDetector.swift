@@ -42,7 +42,9 @@ nonisolated final class ObjectDetector: @unchecked Sendable {
             return []
         }
         return (request.results as? [VNRecognizedObjectObservation] ?? []).compactMap { observation in
-            guard let top = observation.labels.first, top.confidence >= ObjectCatalog.minimumConfidence else { return nil }
+            guard let top = observation.labels.first,
+                  top.confidence >= (top.identifier == "traffic light" ? ObjectCatalog.signalConfidence : ObjectCatalog.minimumConfidence)
+            else { return nil }
             let box = observation.boundingBox // bottom-left origin
             return RawDetection(
                 identifier: top.identifier,
@@ -55,24 +57,28 @@ nonisolated final class ObjectDetector: @unchecked Sendable {
 
 /// Shared logic for turning detections into labeled, ranged objects.
 nonisolated enum FrameAnalysis {
-    /// Frames per second to analyze, lowered when the phone is getting hot.
+    /// Frames per second to analyze, lowered when the phone is getting hot. Fast enough for the tracker
+    /// to confirm things within half a second; what's said is paced separately (WalkNarrator).
     static var analysisInterval: TimeInterval {
         switch ProcessInfo.processInfo.thermalState {
         case .critical: 1.0 / 3
-        case .serious: 1.0 / 8
-        default: 1.0 / 15
+        case .serious: 1.0 / 5
+        default: 1.0 / 10
         }
     }
 
     /// - Parameters:
     ///   - depth: LiDAR distance for a box, if available.
-    ///   - focalLengthPixels: vertical focal length of the upright image, for size-based estimates.
-    ///   - imageHeightPixels: height of the upright image in pixels.
+    ///   - focalLengthPixels: focal length of the upright image, for size-based estimates and sideways offsets.
+    ///   - imageHeightPixels, imageWidthPixels: size of the upright image in pixels.
+    ///   - world: ARKit world position of an image point at a distance, when available.
     static func objects(
         from detections: [RawDetection],
         depth: (CGRect) -> Double?,
         focalLengthPixels: Double,
-        imageHeightPixels: Double
+        imageHeightPixels: Double,
+        imageWidthPixels: Double,
+        world: (CGPoint, Double) -> SIMD3<Double>? = { _, _ in nil }
     ) -> [DetectedObject] {
         detections.compactMap { detection in
             guard let entry = ObjectCatalog.entry(for: detection.identifier) else { return nil }
@@ -83,8 +89,12 @@ nonisolated enum FrameAnalysis {
                 focalLengthPixels: focalLengthPixels,
                 touchesEdge: touchesEdge
             )
+            let center = CGPoint(x: detection.box.midX, y: detection.box.midY)
+            // Pinhole: sideways offset = pixels from center ÷ focal length × distance.
+            let lateral = distance.map { Double(center.x - 0.5) * imageWidthPixels / focalLengthPixels * $0 }
             return DetectedObject(label: entry.label, category: entry.category, confidence: detection.confidence,
-                                  boundingBox: detection.box, distanceMeters: distance)
+                                  boundingBox: detection.box, distanceMeters: distance, lateralMeters: lateral,
+                                  worldPosition: distance.flatMap { world(center, $0) })
         }
     }
 
