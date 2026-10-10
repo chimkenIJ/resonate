@@ -1,0 +1,137 @@
+# Resonate
+
+Resonate is an AI-powered accessibility app that helps people with disabilities navigate and understand their surroundings.
+
+The initial focus is blind and low-vision users. The app combines obstacle detection, spoken feedback, vibration cues, and walking routes with accessibility information. It supports outdoor navigation and indoor room scanning, with room to add tools for other needs, including color recognition.
+
+Everyday navigation can be difficult when crossings, sidewalks, entrances, and obstacles aren't clearly described. Resonate brings that information into one app and lets users choose the feedback and routing preferences that work for them.
+
+## App flow
+
+Sign in or continue as a guest → onboarding and preferences → home.
+
+From home, users can search for a destination, follow a walking route, check their surroundings, scan a room, and save places in folders. Signed-in users store saved places and preferences in the backend. Guests keep them on the phone.
+
+## Stack
+
+| Part | Implementation |
+| --- | --- |
+| iOS app | Swift and SwiftUI, built in Xcode using MVVM |
+| Object detection | Apple Vision and Core ML running YOLO11s on the device |
+| Distance | ARKit LiDAR where available; object-size estimates on non-LiDAR phones |
+| Indoor scanning | Apple RoomPlan with LiDAR |
+| Maps and outdoor routes | MapKit for display, OpenStreetMap data, Nominatim search, and Valhalla walking routes |
+| Feedback | ElevenLabs voice, AVSpeechSynthesizer as an offline fallback, Core Haptics, and audio cues |
+| Scene descriptions | Gemini through a backend function, requested by the user |
+| Authentication | Auth0 |
+| Backend | Supabase Postgres/PostGIS and Edge Functions |
+
+Outdoor search, routing, and accessibility features are scoped to Atlanta and Georgia using OpenStreetMap data. The map server imports the Georgia extract, including tags for crossings, curb ramps, tactile paving, steps, and other accessibility features. MapKit supplies the map display.
+
+The current region checks use a Georgia bounding box, which includes small parts of neighboring states. See the [backend setup guide](docs/BACKEND_SETUP.md#2e-exact-georgia-border-optional) for loading the exact state boundary.
+
+## Run the demo
+
+You need a Mac with Xcode and either an iPhone or an iOS simulator. The deployment target is iOS 17.0; use a recent Xcode release compatible with the project's Swift syntax.
+
+1. Clone this repository and open `Resonate.xcodeproj` in Xcode.
+2. Let Xcode resolve the Swift packages. If needed, use **File → Packages → Resolve Package Versions**.
+3. Select the **Resonate** scheme and an iPhone simulator.
+4. Press **⌘R** to build and run.
+5. Choose **Continue without account**, finish onboarding, and try the home, search, route, and saved-place screens.
+
+Without a complete `ResonateConfig.plist`, the app automatically uses mock services. No API keys or backend are needed for this demo. Locations, routes, detection, and feedback are simulated; this mode is for trying the interface.
+
+To run on an iPhone, select your device in Xcode and set your development team under **Signing & Capabilities**. Use an iPhone running iOS 17 or later. Real camera detection needs a physical device, and indoor room scanning needs a supported LiDAR device. The simulator cannot verify camera, LiDAR, or vibration behavior.
+
+## Run with real services
+
+### Accounts and app configuration
+
+Follow [Backend setup](docs/BACKEND_SETUP.md) to create your Auth0 application and Supabase project, connect Auth0 to Supabase, and apply all migrations in `supabase/migrations/`.
+
+Copy the example configuration from the repository root:
+
+```sh
+cp config/ResonateConfig.example.plist Resonate/Resources/ResonateConfig.plist
+```
+
+Fill in `SupabaseURL`, `SupabaseKey`, `Auth0Domain`, `Auth0ClientID`, and `Auth0Audience`. Missing values or `YOUR_` placeholders keep the app in mock mode. Rebuild after changing the file.
+
+Use your actual bundle identifier for Auth0's callback and logout URLs:
+
+```text
+YOUR_BUNDLE_ID://YOUR_AUTH0_DOMAIN/ios/YOUR_BUNDLE_ID/callback
+```
+
+The project currently uses `com.ashleyni.Resonate`. The backend guide contains an older example identifier, so replace it with the one shown in your Xcode target.
+
+The app configuration is gitignored. Only public client values belong there; keep database service-role keys and Gemini/ElevenLabs API keys on the backend.
+
+### Search and routing
+
+Follow [Map server setup](docs/MAP_SERVER.md) for the Georgia OSM import, Valhalla, Nominatim, accessibility data, and the `geocode` and `route` Edge Functions.
+
+For local testing, install Docker Desktop, Node.js/npm, and Python 3. With the account configuration above completed, create `supabase/functions/.env.local` containing:
+
+```dotenv
+VALHALLA_URL=http://host.docker.internal:8002
+NOMINATIM_URL=https://nominatim.openstreetmap.org
+```
+
+Then run from the repository root:
+
+```sh
+server/scripts/dev_up.sh
+```
+
+The script starts local routing and Supabase, loads accessibility points, and updates the app's `FunctionsURL` and `FunctionsKey`. The first run downloads Georgia map data and builds routing tiles, so allow time for it to finish. Accounts and saved places still use your configured hosted Supabase project.
+
+Rebuild the app in Xcode. For a phone, keep the Mac awake, put both devices on the same Wi-Fi, and allow Local Network access when prompted. For a simulator, set `FunctionsURL` to `http://127.0.0.1:54321/functions/v1` if the Mac's `.local` address is unreachable.
+
+Stop the local services with:
+
+```sh
+server/scripts/dev_down.sh
+```
+
+Local search uses public Nominatim for light personal testing. Use the self-hosted Nominatim setup in the map server guide for a deployed app.
+
+### Voice and scene descriptions
+
+Configure `ELEVENLABS_API_KEY` and `GEMINI_API_KEY` as Supabase function secrets, then deploy the `speak` and `describe` functions. For local functions, add the keys to the gitignored `supabase/functions/.env.local` and restart the local services. Optional settings are `ELEVENLABS_VOICE_ID` and `GEMINI_MODEL`.
+
+The YOLO Core ML model is included in `Resonate/Resources/Models/`. See the [model notes](Resonate/Resources/Models/README.md) for export instructions and licensing.
+
+## Project structure
+
+The app follows MVVM: views render the interface, view models handle screen state and actions, and services handle accounts, maps, vision, and feedback.
+
+```text
+Resonate/
+  Views/          SwiftUI screens
+  ViewModels/     Screen state and actions
+  Models/         App data and navigation logic
+  Services/       Protocols, live implementations, and mocks
+  Components/     Shared interface components
+  Theme/          Colors, typography, and spacing
+  Resources/      Fonts, Core ML model, and local configuration
+ResonateTests/    Unit tests
+supabase/        Database migrations and Edge Functions
+server/          Map server containers and development scripts
+docs/            Backend and map setup guides
+```
+
+To run the unit tests, select the **Resonate** scheme and an iPhone simulator in Xcode, then press **⌘U**.
+
+## Storage and current features
+
+Supabase stores user profiles, saved places, folders, preferences, and OSM accessibility points. The `saved_routes` table stores saved destinations rather than complete route histories. Routing runs on the separate Valhalla server.
+
+Color recognition currently uses a mock service. On non-LiDAR phones, obstacle distances are estimated from object size; indoor room scanning requires LiDAR.
+
+## Limits
+
+OSM accessibility coverage varies, and a route may still include steps or unverified crossings. Camera detection can miss objects, and non-LiDAR distance estimates are approximate. Resonate is a prototype that supplements a cane or guide dog; it does not replace them.
+
+Map data: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
