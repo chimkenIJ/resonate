@@ -74,7 +74,8 @@ final class LiveLocationService: NSObject, LocationServicing, CLLocationManagerD
             headingStreams[id] = continuation
             manager.startUpdatingHeading()
             continuation.onTermination = { [weak self] _ in
-                Task { @MainActor in self?.removeHeadingStream(id) }
+                guard let self else { return }
+                Task { @MainActor in self.removeHeadingStream(id) }
             }
         }
     }

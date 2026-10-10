@@ -73,4 +73,7 @@ nonisolated struct DetectionFrame: Sendable {
     var objects: [DetectedObject]
     var depthSource: DepthSource
     var timestamp: Date = .now
+    /// Size of the upright camera image the boxes refer to, so the overlay can match the
+    /// aspect-fill camera preview. Nil for mock frames (boxes are drawn stretched).
+    var imageSize: CGSize? = nil
 }

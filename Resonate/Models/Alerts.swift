@@ -59,16 +59,19 @@ nonisolated enum ObstacleAlertComposer {
         guard let nearest = candidates.min(by: { priority($0) < priority($1) }),
               let distance = nearest.distanceMeters else { return nil }
 
-        let severity: AlertSeverity = distance <= stopRange || nearest.category == .dropOff && distance <= 2
-            ? .stop : .headsUp
+        let isEdge = nearest.category == .dropOff || nearest.category == .stairs
+        let severity: AlertSeverity = distance <= stopRange || (isEdge && distance <= 2) ? .stop : .headsUp
         let direction = nearest.direction
         let headline = "\(nearest.label) \(direction.spoken), \(DistanceText.spoken(distance))."
 
         let guidance: String
         let icon: Maneuver
         switch (nearest.category, direction) {
-        case (.dropOff, _), (.stairs, _):
+        case (.dropOff, _):
             guidance = severity == .stop ? "Stop. Check the edge with your cane." : "Slow down. Edge ahead."
+            icon = .straight
+        case (.stairs, _):
+            guidance = severity == .stop ? "Stop. Step up right in front of you." : "Slow down. Step up ahead."
             icon = .straight
         case (_, .left), (_, .slightlyLeft):
             guidance = "Step right to pass."

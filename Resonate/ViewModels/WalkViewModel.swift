@@ -11,6 +11,8 @@ final class WalkViewModel {
     }
 
     private(set) var objects: [DetectedObject] = []
+    private(set) var imageSize: CGSize?
+    private(set) var cameraAvailable = true
     private(set) var alert: ObstacleAlert?
     private(set) var navigation: NavigationEngine?
     private(set) var isRerouting = false
@@ -42,6 +44,7 @@ final class WalkViewModel {
 
     // MARK: Display
 
+    var previewSource: CameraPreviewSource { detection.previewSource }
     var route: Route? { navigation?.route }
     var isNavigating: Bool { navigation != nil }
     var hasArrived: Bool { navigation?.hasArrived ?? false }
@@ -53,6 +56,7 @@ final class WalkViewModel {
     var headline: String {
         if let alert { return alert.headline }
         if hasArrived { return "You've arrived." }
+        if !cameraAvailable { return "Camera is off. No obstacle alerts." }
         if isRerouting { return "Finding a new route." }
         return "Path looks clear ahead."
     }
@@ -85,8 +89,14 @@ final class WalkViewModel {
     }
 
     private func watchObstacles() async {
+        guard await detection.requestPermission() else {
+            cameraAvailable = false
+            await feedback.announce(AppError.permissionDenied(.camera).spokenMessage + " Directions still work.", priority: .navigation)
+            return
+        }
         for await frame in detection.frames() {
             objects = frame.objects
+            imageSize = frame.imageSize
             if let next = ObstacleAlertComposer.compose(from: frame.objects) {
                 alert = next
                 await feedback.deliver(next)

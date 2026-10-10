@@ -12,8 +12,14 @@ struct WalkView: View {
 
     var body: some View {
         ZStack {
-            CameraBackdrop(scene: .street)
-            DetectionOverlay(objects: model.objects)
+            if model.previewSource.isLive {
+                CameraPreviewView(source: model.previewSource)
+                    .ignoresSafeArea()
+                    .accessibilityHidden(true)
+            } else {
+                CameraBackdrop(scene: .street)
+            }
+            DetectionOverlay(objects: model.objects, imageSize: model.imageSize)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {

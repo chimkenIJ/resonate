@@ -1,3 +1,5 @@
+import ARKit
+import AVFoundation
 import Foundation
 
 // Every ViewModel talks to these protocols, never to a concrete service.
@@ -94,18 +96,34 @@ protocol TonesServicing: AnyObject {
 
 // MARK: - Vision
 
-/// Outdoor obstacle detection: camera + YOLO + depth. Fully on-device.
+/// What the camera screen shows behind the overlay.
+enum CameraPreviewSource {
+    case none
+    case ar(ARSession)
+    case capture(AVCaptureSession)
+
+    var isLive: Bool {
+        if case .none = self { return false }
+        return true
+    }
+}
+
+/// Outdoor obstacle detection: camera + YOLO + depth. Fully on-device, works offline.
 protocol ObstacleDetectionServicing: AnyObject {
-    /// `.lidar` on LiDAR phones, `.estimated` when the depth model is used.
+    /// `.lidar` on LiDAR phones, `.estimated` (from object size) otherwise.
     var depthSource: DepthSource { get }
+    var previewSource: CameraPreviewSource { get }
+    func requestPermission() async -> Bool
     func frames() -> AsyncStream<DetectionFrame>
     /// JPEG of the latest camera frame, for "Describe the whole scene".
     func latestFrameJPEG() async -> Data?
 }
 
-/// Indoor scanning with ARKit LiDAR / RoomPlan.
+/// Indoor scanning with ARKit LiDAR / RoomPlan. Fully on-device.
 protocol IndoorScanServicing: AnyObject {
     var isSupported: Bool { get }
+    var previewSource: CameraPreviewSource { get }
+    func requestPermission() async -> Bool
     func snapshots() -> AsyncStream<IndoorSnapshot>
     func latestFrameJPEG() async -> Data?
 }

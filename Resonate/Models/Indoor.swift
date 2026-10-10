@@ -6,6 +6,8 @@ nonisolated struct MiniMapItem: Identifiable, Hashable, Sendable {
     var id: UUID = UUID()
     var category: ObjectCategory
     var rect: CGRect
+    /// Radians, around the rect's center (walls at an angle).
+    var rotation: Double = 0
 }
 
 /// One update from the indoor scanner.
@@ -17,6 +19,14 @@ nonisolated struct IndoorSnapshot: Sendable {
     var guidance: String
     var guidanceIcon: Maneuver
     var miniMap: [MiniMapItem]
+    /// Safety alert when something is very close in the walking path.
+    var alert: ObstacleAlert? = nil
+    /// Stable key for `headline`, so changing step counts aren't re-announced.
+    var announcementKey: String = ""
+    /// Scanning tip from RoomPlan ("Move the phone more slowly."), if any.
+    var coaching: String? = nil
+    /// Size of the upright camera image the boxes refer to (see DetectionFrame.imageSize).
+    var imageSize: CGSize? = nil
 }
 
 nonisolated enum SceneSetting: String, Codable, Sendable {

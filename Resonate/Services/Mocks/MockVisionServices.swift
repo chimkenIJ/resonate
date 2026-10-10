@@ -18,6 +18,9 @@ private func cycling<Element: Sendable>(_ items: [Element], every interval: Dura
 
 final class MockObstacleDetectionService: ObstacleDetectionServicing {
     let depthSource: DepthSource = .lidar
+    var previewSource: CameraPreviewSource { .none }
+
+    func requestPermission() async -> Bool { true }
 
     func frames() -> AsyncStream<DetectionFrame> {
         cycling(SampleData.outdoorFrames, every: .seconds(3))
@@ -28,6 +31,9 @@ final class MockObstacleDetectionService: ObstacleDetectionServicing {
 
 final class MockIndoorScanService: IndoorScanServicing {
     let isSupported = true
+    var previewSource: CameraPreviewSource { .none }
+
+    func requestPermission() async -> Bool { true }
 
     func snapshots() -> AsyncStream<IndoorSnapshot> {
         cycling(SampleData.indoorSnapshots, every: .seconds(3))

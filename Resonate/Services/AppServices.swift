@@ -40,8 +40,8 @@ struct AppServices {
         )
     }
 
-    /// Real accounts, saved places, location, search, routing, and voice input.
-    /// Voice output and vision stay mocked until build steps 5–7.
+    /// Real accounts, saved places, location, search, routing, voice input, obstacle detection,
+    /// indoor scanning, haptics, and tones. Voice output and scene descriptions stay mocked until step 7.
     static func live(config: AppConfig) -> AppServices {
         let mock = AppServices.mock()
         let auth = Auth0AuthService(config: config)
@@ -65,10 +65,11 @@ struct AppServices {
             routing: LiveRoutingService(client: functions),
             speech: mock.speech,
             speechRecognition: LiveSpeechRecognitionService(),
-            haptics: mock.haptics,
-            tones: mock.tones,
-            obstacleDetection: mock.obstacleDetection,
-            indoorScan: mock.indoorScan,
+            haptics: LiveHapticsService(),
+            tones: LiveTonesService(),
+            obstacleDetection: LiDARObstacleDetectionService.isSupported
+                ? LiDARObstacleDetectionService() : CameraObstacleDetectionService(),
+            indoorScan: RoomScanService(),
             sceneDescription: mock.sceneDescription,
             colorRecognition: mock.colorRecognition
         )

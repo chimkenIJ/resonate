@@ -11,8 +11,14 @@ struct IndoorScanView: View {
 
     var body: some View {
         ZStack {
-            CameraBackdrop(scene: .room)
-            DetectionOverlay(objects: model.snapshot?.objects ?? [])
+            if model.previewSource.isLive {
+                CameraPreviewView(source: model.previewSource)
+                    .ignoresSafeArea()
+                    .accessibilityHidden(true)
+            } else {
+                CameraBackdrop(scene: .room)
+            }
+            DetectionOverlay(objects: model.snapshot?.objects ?? [], imageSize: model.snapshot?.imageSize)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -65,8 +71,14 @@ struct IndoorScanView: View {
 
             GuidanceRow(text: model.guidance, systemImage: model.guidanceIcon.systemImage, accent: .sand)
 
+            if let coaching = model.coaching {
+                Label(coaching, systemImage: "lightbulb")
+                    .appFont(.footnote)
+                    .foregroundStyle(Palette.textMuted)
+            }
+
             HStack(spacing: 10) {
-                PillButton(title: "Repeat", kind: .secondary, accessibilityHint: "Says the last message again") {
+                PillButton(title: "Repeat", kind: .secondary, accessibilityHint: "Says what's around you again") {
                     Task { await model.repeatLast() }
                 }
                 PillButton(title: model.isDescribing ? "Looking…" : "Describe room") {

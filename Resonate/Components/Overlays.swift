@@ -43,18 +43,29 @@ struct SheetCard<Content: View>: View {
 /// VoiceOver ignores it because the spoken alert carries the same information.
 struct DetectionOverlay: View {
     let objects: [DetectedObject]
+    /// Size of the upright camera image the boxes refer to. With it, boxes line up with an
+    /// aspect-fill camera preview; without it (mock frames), boxes stretch to the view.
+    var imageSize: CGSize? = nil
     /// Distance from the top of the screen that the back button and status pill cover.
     var labelTopLimit: CGFloat = 140
+
+    /// Maps a normalized image rect to view points, matching aspect-fill cropping.
+    static func viewRect(for box: CGRect, imageSize: CGSize?, in viewSize: CGSize) -> CGRect {
+        guard let imageSize, imageSize.width > 0, imageSize.height > 0 else {
+            return CGRect(x: box.minX * viewSize.width, y: box.minY * viewSize.height,
+                          width: box.width * viewSize.width, height: box.height * viewSize.height)
+        }
+        let scale = max(viewSize.width / imageSize.width, viewSize.height / imageSize.height)
+        let shown = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        let origin = CGPoint(x: (viewSize.width - shown.width) / 2, y: (viewSize.height - shown.height) / 2)
+        return CGRect(x: origin.x + box.minX * shown.width, y: origin.y + box.minY * shown.height,
+                      width: box.width * shown.width, height: box.height * shown.height)
+    }
 
     var body: some View {
         GeometryReader { proxy in
             ForEach(objects) { object in
-                let rect = CGRect(
-                    x: object.boundingBox.minX * proxy.size.width,
-                    y: object.boundingBox.minY * proxy.size.height,
-                    width: object.boundingBox.width * proxy.size.width,
-                    height: object.boundingBox.height * proxy.size.height
-                )
+                let rect = Self.viewRect(for: object.boundingBox, imageSize: imageSize, in: proxy.size)
                 let accent = object.category.accent
                 let dashed = object.category == .dropOff
 
@@ -114,6 +125,7 @@ struct MiniMapView: View {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(item.category.accent.color)
                         .frame(width: item.rect.width * proxy.size.width, height: item.rect.height * proxy.size.height)
+                        .rotationEffect(.radians(item.rotation))
                         .position(x: item.rect.midX * proxy.size.width, y: item.rect.midY * proxy.size.height)
                 }
                 Circle()
@@ -127,6 +139,7 @@ struct MiniMapView: View {
             }
         }
         .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
         .accessibilityHidden(true)
     }
 }

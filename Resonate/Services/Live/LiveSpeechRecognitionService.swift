@@ -46,7 +46,8 @@ final class LiveSpeechRecognitionService: SpeechRecognitionServicing {
                 continuation.finish(throwing: error)
             }
             continuation.onTermination = { [weak self] _ in
-                Task { @MainActor in self?.teardown() }
+                guard let self else { return }
+                Task { @MainActor in self.teardown() }
             }
         }
     }
@@ -97,7 +98,8 @@ final class LiveSpeechRecognitionService: SpeechRecognitionServicing {
         lastTranscript = ""
         lastChange = .now
         task = Self.recognize(with: recognizer, request: request, continuation: continuation) { [weak self] text in
-            Task { @MainActor in self?.noteTranscript(text) }
+            guard let self else { return }
+            Task { @MainActor in self.noteTranscript(text) }
         }
         startWatchdog()
     }

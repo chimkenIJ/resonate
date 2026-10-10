@@ -5,4 +5,5 @@ nonisolated enum Log {
     static let account = Logger(subsystem: "com.ishajain.Resonate", category: "account")
     static let data = Logger(subsystem: "com.ishajain.Resonate", category: "data")
     static let speech = Logger(subsystem: "com.ishajain.Resonate", category: "speech")
+    static let vision = Logger(subsystem: "com.ishajain.Resonate", category: "vision")
 }
