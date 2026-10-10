@@ -28,8 +28,8 @@ nonisolated enum SpeechPhrases {
         phrases.formUnion(directions.map { "\($0.spoken)." })
         phrases.formUnion(["approaching from the left.", "approaching from the right.", "coming toward you."])
         phrases.formUnion([WalkNarrator.PathAdvice.clear, .veerLeft, .veerRight, .blocked].map(\.rawValue))
-        phrases.formUnion(["Wait for it to pass.", "Check the edge with your cane.", "Check the step with your cane.",
-                           "Find the railing. Check each step with your cane."])
+        phrases.formUnion(["Wait for it to pass.", "Watch the edge.", "Watch the step.",
+                           "Find the railing."])
 
         // Pedestrian signals.
         phrases.formUnion([SignalReading.walk.spoken, SignalReading.dontWalk.spoken])
@@ -45,7 +45,8 @@ nonisolated enum SpeechPhrases {
         phrases.formUnion([
             "You're off the route. Finding a new one.", "You're back on the route.",
             "Turn around. You're walking away from the route.", "That's the right way.",
-            "Raised curb ahead. Check the edge with your cane.", "Steps ahead.",
+            "You're on the stairs, going up. Hold the railing.", "You're on the stairs, going down. Hold the railing.",
+            "Raised curb ahead. Watch the edge.", "Steps ahead.",
             "Watching ahead. I'll warn you about obstacles.",
         ])
         return phrases.sorted()

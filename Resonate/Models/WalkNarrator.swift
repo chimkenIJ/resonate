@@ -57,6 +57,11 @@ nonisolated struct WalkNarrator {
     /// True while climbing stairs (see `stairsQuietUntil`), so the screen can hold still too.
     var isOnStairs: Bool { stairsQuietUntil != nil }
 
+    /// The phone is going up or down steps (from its height changing): stay in stairs mode.
+    mutating func noteClimbing(now: Date) {
+        stairsQuietUntil = now.addingTimeInterval(Self.stairsQuietTime)
+    }
+
     /// - Parameter canSpeak: false while something else is playing; summaries never talk over it.
     mutating func update(tracks all: [TrackedObstacle], clearance: PathClearance?, canSpeak: Bool, now: Date) -> [Output] {
         if startedAt == nil {
@@ -136,9 +141,9 @@ nonisolated struct WalkNarrator {
         } else {
             place = "\(track.direction.spoken)."
             switch track.category {
-            case .dropOff: guidance = "Check the edge with your cane."
-            case .stairs where track.label.hasPrefix("Stairs"): guidance = "Find the railing. Check each step with your cane."
-            case .stairs: guidance = "Check the step with your cane."
+            case .dropOff: guidance = "Watch the edge."
+            case .stairs where track.label.hasPrefix("Stairs"): guidance = "Find the railing."
+            case .stairs: guidance = "Watch the step."
             default:
                 let way = passingSide(for: track, clearance: clearance)
                 guidance = way?.rawValue ?? "Turn left or right."

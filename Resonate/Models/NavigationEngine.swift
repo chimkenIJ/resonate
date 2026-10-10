@@ -32,8 +32,14 @@ nonisolated struct NavigationEngine: Sendable {
     /// and their progress along it counts. Before that (still inside, crossing a parking lot)
     /// upcoming turns aren't announced.
     static let onPathDistance = 15.0
-    /// Walking back along the route this far from the furthest point reached means the wrong way…
+    /// Walking back along the route this far from the furthest point reached (or the GPS accuracy,
+    /// if worse), for at least `wrongWayFixes` readings in a row over `wrongWayTime`, means the wrong way…
     static let wrongWayDistance = 12.0
+    static let wrongWayFixes = 3
+    static let wrongWayTime: TimeInterval = 5
+    /// Progress can't jump ahead faster than someone walks (a GPS spike would otherwise make the
+    /// next normal reading look like walking backward).
+    static let maxWalkingSpeed = 3.0
     /// …and it's said again this often if the user keeps going.
     static let wrongWayRepeat: TimeInterval = 30
     /// Off route beyond this distance (plus GPS accuracy, up to 30 m)…
@@ -41,7 +47,9 @@ nonisolated struct NavigationEngine: Sendable {
     /// …for at least this long, so one bad GPS reading doesn't trigger a reroute.
     static let offRouteDelay: TimeInterval = 8
     static let hazardDistance = 20.0
-    static let arrivalRadius = 12.0
+    /// Arrived: this close in a straight line, or this far from the end measured along the route.
+    static let arrivalRadius = 8.0
+    static let arrivalAlong = 8.0
     /// A turn reached farther away than this (poor GPS widens the radius) is announced with its distance,
     /// "In about 20 meters, turn right", so it isn't mistaken for "turn right now".
     static let turnNowDistance = 8.0
@@ -61,6 +69,11 @@ nonisolated struct NavigationEngine: Sendable {
     private(set) var isOnPath = false
     private(set) var isWrongWay = false
     private var wrongWaySaidAt: Date?
+    /// Consecutive readings that show the user moving backward along the route, and when they began.
+    private var backwardFixes = 0
+    private var backwardSince: Date?
+    private var lastAlong: Double?
+    private var lastFixTime: Date?
     /// Meters along the route of each polyline point, each maneuver, and each crossing.
     private let cumulative: [Double]
     private let stepAlong: [Double]
@@ -105,12 +118,11 @@ nonisolated struct NavigationEngine: Sendable {
     mutating func update(_ fix: LocationFix) -> [Event] {
         guard !hasArrived else { return [] }
         var events: [Event] = []
+        defer { lastFixTime = fix.timestamp }
 
         // Arrival first: being at the destination ends navigation even if steps were skipped.
         if fix.point.distance(to: route.arrivalPoint) <= Self.arrivalRadius {
-            hasArrived = true
-            stepIndex = max(route.steps.count - 1, 0)
-            return [.arrived]
+            return arrive()
         }
 
         // Off-route detection.
@@ -136,10 +148,35 @@ nonisolated struct NavigationEngine: Sendable {
         if let projected = Self.project(fix.point, on: route.polyline, cumulative, from: progress - 60, to: progress + 150),
            projected.offset <= onPathLimit {
             isOnPath = true
-            progress = max(progress, projected.along)
+            // The first reading on the route sets progress directly; after that it can't outrun walking.
+            let elapsed = lastAlong == nil ? nil : lastFixTime.map { fix.timestamp.timeIntervalSince($0) }
+            let maxAdvance = elapsed.flatMap { $0 > 0 ? 10 + Self.maxWalkingSpeed * min($0, 30) : nil } ?? .infinity
+            progress = max(progress, min(projected.along, progress + maxAdvance))
+
             // Going backward along the route: say "Turn around" rather than counting the distance up.
+            // Needs real evidence, not one jumpy reading: the GPS direction of travel pointing back
+            // along the route, or the position moving back, several readings in a row.
+            let movingBack: Bool
+            if let course = fix.course, (fix.speed ?? 1) >= 0.6 {
+                let along = Self.bearing(of: route.polyline, at: projected.segment)
+                movingBack = abs((course - along + 540).truncatingRemainder(dividingBy: 360) - 180) > 120
+            } else {
+                movingBack = projected.along < (lastAlong ?? projected.along) - 1.5
+            }
+            lastAlong = projected.along
+            if movingBack {
+                backwardFixes += 1
+                backwardSince = backwardSince ?? fix.timestamp
+            } else {
+                backwardFixes = 0
+                backwardSince = nil
+            }
+
             let behind = progress - projected.along
-            if behind >= Self.wrongWayDistance {
+            let wrongWay = behind >= max(Self.wrongWayDistance, min(fix.accuracy, 25))
+                && backwardFixes >= Self.wrongWayFixes
+                && fix.timestamp.timeIntervalSince(backwardSince ?? fix.timestamp) >= Self.wrongWayTime
+            if wrongWay {
                 if !isWrongWay || fix.timestamp.timeIntervalSince(wrongWaySaidAt ?? .distantPast) >= Self.wrongWayRepeat {
                     isWrongWay = true
                     wrongWaySaidAt = fix.timestamp
@@ -149,6 +186,11 @@ nonisolated struct NavigationEngine: Sendable {
             } else if isWrongWay, behind <= Self.wrongWayDistance / 2 {
                 isWrongWay = false
                 events.append(.rightWay)
+            }
+
+            // At the end of the route (measured along it, which tolerates GPS drifting to the side).
+            if (cumulative.last ?? 0) - progress <= Self.arrivalAlong + min(fix.accuracy, 20) * 0.25 {
+                return events + arrive()
             }
         } else {
             isOnPath = false
@@ -162,18 +204,16 @@ nonisolated struct NavigationEngine: Sendable {
             stepIndex = reached
             reachedDistance = isOnPath ? max(stepAlong[reached] - progress, 0) : fix.point.distance(to: route.steps[reached].start)
             if route.steps[reached].maneuver == .arrive {
-                hasArrived = true
-                events.append(.arrived)
+                return events + arrive()
             } else {
                 events.append(.reached(stepIndex: reached))
             }
             return events
         }
 
-        // Approaching the next maneuver: only once the user is walking the path that leads to it.
+        // Approaching the next maneuver (or the destination): only once the user is walking the path that leads to it.
         let next = stepIndex + 1
-        if isOnPath, route.steps.indices.contains(next), !announcedApproach.contains(next),
-           route.steps[next].maneuver != .arrive {
+        if isOnPath, route.steps.indices.contains(next), !announcedApproach.contains(next) {
             let distance = stepAlong[next] - progress
             if distance <= Self.approachDistance, distance >= Self.minimumApproachDistance {
                 announcedApproach.insert(next)
@@ -196,7 +236,9 @@ nonisolated struct NavigationEngine: Sendable {
     func announcement(for event: Event) -> String {
         switch event {
         case .approaching(let index, let distance):
-            return Self.inDistance(distance, route.steps[index])
+            guard route.steps[index].maneuver == .arrive else { return Self.inDistance(distance, route.steps[index]) }
+            let place = route.entrance.map { "\($0.spokenName) of \(route.destination.name)" } ?? route.destination.name
+            return "In about \(DistanceText.spoken(distance)), you'll reach \(place)."
         case .reached(let index):
             let step = route.steps[index]
             return reachedDistance > Self.turnNowDistance ? Self.inDistance(reachedDistance, step) : step.spoken
@@ -217,7 +259,21 @@ nonisolated struct NavigationEngine: Sendable {
         }
     }
 
+    private mutating func arrive() -> [Event] {
+        hasArrived = true
+        isWrongWay = false
+        stepIndex = max(route.steps.count - 1, 0)
+        return [.arrived]
+    }
+
     // MARK: Geometry
+
+    /// Compass bearing of a route segment.
+    private static func bearing(of polyline: [GeoPoint], at segment: Int) -> Double {
+        guard polyline.count > 1 else { return 0 }
+        let i = min(max(segment, 0), polyline.count - 2)
+        return polyline[i].bearing(to: polyline[i + 1])
+    }
 
     private static func cumulativeLengths(_ polyline: [GeoPoint]) -> [Double] {
         var total = 0.0
@@ -229,9 +285,9 @@ nonisolated struct NavigationEngine: Sendable {
 
     /// The closest point on the route to `point`, among segments between `from` and `to` meters along it.
     static func project(_ point: GeoPoint, on polyline: [GeoPoint], _ cumulative: [Double],
-                        from: Double, to: Double) -> (along: Double, offset: Double)? {
-        guard polyline.count > 1 else { return polyline.first.map { (0, point.distance(to: $0)) } }
-        var best: (along: Double, offset: Double)?
+                        from: Double, to: Double) -> (along: Double, offset: Double, segment: Int)? {
+        guard polyline.count > 1 else { return polyline.first.map { (0, point.distance(to: $0), 0) } }
+        var best: (along: Double, offset: Double, segment: Int)?
         for i in 0..<(polyline.count - 1) where cumulative[i + 1] >= from && cumulative[i] <= to {
             let a = polyline[i], b = polyline[i + 1]
             let offset = point.distance(toSegmentFrom: a, to: b)
@@ -239,7 +295,7 @@ nonisolated struct NavigationEngine: Sendable {
             // How far along the segment the closest point is: from the distances to both ends.
             let da = point.distance(to: a), db = point.distance(to: b)
             let t = length > 0 ? max(0, min(1, (da * da - db * db + length * length) / (2 * length * length))) : 0
-            if best == nil || offset < best!.offset { best = (cumulative[i] + t * length, offset) }
+            if best == nil || offset < best!.offset { best = (cumulative[i] + t * length, offset, i) }
         }
         return best
     }

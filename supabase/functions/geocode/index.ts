@@ -1,4 +1,7 @@
-// Destination search: Nominatim (Georgia OSM data), closest results first.
+// Destination search on OpenStreetMap data, closest results first.
+//
+// With STADIA_API_KEY set (the cloud setup), searches Stadia Maps' hosted geocoder: the public
+// Nominatim server blocks most requests from cloud servers. Otherwise uses NOMINATIM_URL.
 //
 // POST { query: string, latitude: number, longitude: number, limit?: number }
 // 200  { places: [{ id, name, address, latitude, longitude, distance_m }] }
@@ -57,6 +60,24 @@ Deno.serve(async (req) => {
   if (!inGeorgia(lat, lon)) return error("outside_georgia", OUTSIDE_GEORGIA_MESSAGE, 422);
   const limit = isFiniteNumber(body?.limit) ? Math.min(Math.max(Math.round(body.limit), 1), 10) : 5;
 
+  const stadiaKey = Deno.env.get("STADIA_API_KEY");
+  if (stadiaKey) {
+    try {
+      const sorted = (await stadiaSearch(stadiaKey, query, lat as number, lon as number))
+        .filter((p) => inGeorgia(p.latitude, p.longitude))
+        .sort((a, b) => a.distance_m - b.distance_m);
+      const places = (sorted.some((p) => p.distance_m <= FAR_M) ? sorted.filter((p) => p.distance_m <= FAR_M) : sorted)
+        .slice(0, limit);
+      if (places.length === 0) {
+        return error("no_results", `I couldn't find ${query} near you. Try saying it another way.`, 404);
+      }
+      return json({ places });
+    } catch (e) {
+      console.error("geocode (Stadia) failed", e);
+      return error("upstream_unavailable", "Search isn't working right now. Try again in a moment.", 502);
+    }
+  }
+
   const base = Deno.env.get("NOMINATIM_URL");
   if (!base) return error("upstream_unavailable", "Search isn't set up yet.", 503);
 
@@ -112,6 +133,59 @@ async function search(
   const res = await upstream(`${base.replace(/\/$/, "")}/search?${params}`);
   if (!res.ok) throw new Error(`Nominatim ${res.status}`);
   return await res.json() as NominatimResult[];
+}
+
+interface StadiaFeature {
+  geometry: { coordinates: [number, number] };
+  properties: {
+    gid: string;
+    name?: string;
+    label?: string;
+    housenumber?: string;
+    street?: string;
+    locality?: string;
+    neighbourhood?: string;
+    county?: string;
+    region_a?: string;
+  };
+}
+
+/** Stadia Maps geocoding (OSM data), biased toward the user and limited to Georgia. */
+async function stadiaSearch(key: string, query: string, lat: number, lon: number): Promise<PlaceOut[]> {
+  const params = new URLSearchParams({
+    text: query,
+    "focus.point.lat": String(lat),
+    "focus.point.lon": String(lon),
+    "boundary.rect.min_lat": String(GEORGIA.minLat),
+    "boundary.rect.max_lat": String(GEORGIA.maxLat),
+    "boundary.rect.min_lon": String(GEORGIA.minLon),
+    "boundary.rect.max_lon": String(GEORGIA.maxLon),
+    "boundary.country": "US",
+    size: "25",
+    lang: "en",
+  });
+  const res = await upstream(`https://api.stadiamaps.com/geocoding/v1/search?${params}`, {
+    headers: { Authorization: `Stadia-Auth ${key}` },
+  });
+  if (!res.ok) throw new Error(`Stadia geocoding ${res.status}`);
+  const data = await res.json() as { features?: StadiaFeature[] };
+  return (data.features ?? [])
+    // The box also covers parts of neighboring states.
+    .filter((f) => !f.properties.region_a || f.properties.region_a === "GA")
+    .map((f) => {
+      const [longitude, latitude] = f.geometry.coordinates;
+      const p = f.properties;
+      const street = p.street ? [p.housenumber, p.street].filter(Boolean).join(" ") : "";
+      const city = p.locality || p.neighbourhood || p.county || "";
+      return {
+        id: p.gid,
+        name: p.name || p.label?.split(",")[0] || query,
+        address: [street, city].filter(Boolean).join(", ") || p.label?.split(",").slice(1, 3).join(",").trim() || "",
+        latitude,
+        longitude,
+        distance_m: Math.round(haversine(lat, lon, latitude, longitude)),
+      };
+    });
 }
 
 function dedupe(results: NominatimResult[]): NominatimResult[] {

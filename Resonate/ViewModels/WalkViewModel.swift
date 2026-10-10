@@ -30,6 +30,19 @@ final class WalkViewModel {
 
     /// Recent positions from the camera, to tell when the user has stopped.
     private var recentPoses: [(time: Date, position: SIMD3<Double>)] = []
+    /// "up" or "down" while the user is on stairs (LiDAR phones), from the last 2 seconds of movement.
+    private var climbingDirection: String? {
+        guard let first = recentPoses.first, let last = recentPoses.last,
+              last.time.timeIntervalSince(first.time) >= 1.2 else { return nil }
+        let rise = last.position.y - first.position.y
+        let moved = last.position - first.position
+        // Steps rise about 17 cm for every 28 cm forward. A ramp or hill is far gentler, and an
+        // elevator rises without moving forward.
+        let horizontal = (moved.x * moved.x + moved.z * moved.z).squareRoot()
+        guard abs(rise) >= 0.25, horizontal >= 0.25, abs(rise) / horizontal >= TerrainAnalyzer.stairsMinGrade else { return nil }
+        return rise > 0 ? "up" : "down"
+    }
+
     private var isStandingStill: Bool? {
         guard let first = recentPoses.first, let last = recentPoses.last,
               last.time.timeIntervalSince(first.time) >= 1.5 else { return recentPoses.isEmpty ? nil : false }
@@ -53,6 +66,8 @@ final class WalkViewModel {
     private var signalTracker = WalkSignalTracker()
     /// Whether the current signal state has been said since it started to matter.
     private var signalAnnounced = false
+    /// "You're on the stairs" is said once per flight.
+    private var saidOnStairs = false
     private var alertShownAt: Date = .distantPast
     /// What the last summary was about, so its distances can be redrawn every frame.
     private var summaryAdvice: WalkNarrator.PathAdvice = .clear
@@ -101,7 +116,7 @@ final class WalkViewModel {
     }
 
     var guidance: String {
-        if alert == nil, narrator.isOnStairs { return "Hold the railing. Check each step with your cane." }
+        if alert == nil, narrator.isOnStairs { return "Hold the railing and take it one step at a time." }
         if let shown { return shown.guidance }
         if navigation?.isWrongWay == true { return "Turn around. The route is behind you." }
         if let step = navigation?.currentStep, !hasArrived {
@@ -190,6 +205,16 @@ final class WalkViewModel {
             if let pose = frame.pose {
                 recentPoses.append((now, pose.origin))
                 recentPoses.removeAll { now.timeIntervalSince($0.time) > 2 }
+            }
+            // Climbing or going down: the phone's height keeps changing while the user moves forward.
+            if let direction = climbingDirection {
+                narrator.noteClimbing(now: now)
+                if !saidOnStairs {
+                    saidOnStairs = true
+                    await feedback.announce("You're on the stairs, going \(direction). Hold the railing.", priority: .navigation)
+                }
+            } else if !narrator.isOnStairs {
+                saidOnStairs = false
             }
             // Read out only where it matters; otherwise keep tracking quietly, so arriving at the
             // crossing says the current state.

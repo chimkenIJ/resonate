@@ -117,15 +117,48 @@ struct NavigationEngineTests {
         _ = engine.update(fix(north: 50, at: 0))
         // A little GPS wobble backward is fine.
         #expect(engine.update(fix(north: 45, at: 2)).isEmpty)
-        // Clearly walking back toward the start.
-        #expect(engine.update(fix(north: 35, at: 6)) == [.wrongWay])
+        // Walking back toward the start: it takes a few readings over several seconds to be sure.
+        #expect(engine.update(fix(north: 35, at: 6)).isEmpty)
+        #expect(engine.update(fix(north: 30, at: 9)) == [.wrongWay])
         #expect(engine.announcement(for: .wrongWay) == "Turn around. You're walking away from the route.")
         // Said once, not on every fix…
-        #expect(engine.update(fix(north: 30, at: 10)).isEmpty)
+        #expect(engine.update(fix(north: 28, at: 11)).isEmpty)
         // …and the distance on screen doesn't count up meanwhile.
         #expect(abs((engine.distanceToNextManeuver ?? 0) - 50) < 2)
+        _ = engine.update(fix(north: 40, at: 15))
         // Turned around.
         #expect(engine.update(fix(north: 46, at: 20)) == [.rightWay])
+    }
+
+    @Test func oneGPSJumpAheadIsNotWalkingTheWrongWay() {
+        var engine = NavigationEngine(route: sampleRoute())
+        _ = engine.update(fix(north: 20, at: 0))
+        _ = engine.update(fix(north: 23, at: 2))
+        // GPS spikes 40 m ahead, then settles back to where the user really is, walking forward.
+        _ = engine.update(fix(north: 63, at: 4))
+        for (i, north) in [26.0, 29, 32, 35, 38].enumerated() {
+            #expect(!engine.update(fix(north: north, at: 6 + Double(i) * 2)).contains(.wrongWay))
+        }
+    }
+
+    @Test func gpsDirectionOfTravelConfirmsTheWrongWay() {
+        var engine = NavigationEngine(route: sampleRoute())
+        _ = engine.update(fix(north: 50, at: 0))
+        // GPS says walking north (the route's way) even though readings drift back: not the wrong way.
+        for (i, north) in [44.0, 40, 36, 34].enumerated() {
+            var reading = fix(north: north, at: 2 + Double(i) * 2)
+            reading.course = 0
+            reading.speed = 1.3
+            #expect(!engine.update(reading).contains(.wrongWay))
+        }
+    }
+
+    @Test func warnsBeforeArriving() {
+        var engine = NavigationEngine(route: sampleRoute())
+        _ = engine.update(fix(north: 100, at: 0))
+        let events = engine.update(fix(north: 100, east: 30, at: 10))
+        #expect(events == [.approaching(stepIndex: 2, distance: 20)] || events.contains { if case .approaching(2, _) = $0 { true } else { false } })
+        #expect(engine.announcement(for: .approaching(stepIndex: 2, distance: 20)) == "In about 65 feet, you'll reach Howey.")
     }
 
     @Test func noTurnWarningsBeforeReachingTheRoute() {
@@ -177,7 +210,7 @@ struct NavigationEngineTests {
         var engine = NavigationEngine(route: sampleRoute(hazards: [curb]))
         #expect(engine.update(fix(north: 45)) == [.hazardAhead(curb)])
         #expect(engine.update(fix(north: 50)).isEmpty)
-        #expect(engine.announcement(for: .hazardAhead(curb)) == "Raised curb ahead. Check the edge with your cane.")
+        #expect(engine.announcement(for: .hazardAhead(curb)) == "Raised curb ahead. Watch the edge.")
     }
 }
 

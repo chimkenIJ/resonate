@@ -43,6 +43,26 @@ nonisolated enum ObjectCatalog {
     static let minimumConfidence: Float = 0.5
     /// Traffic lights are only used to read walk signals, which are small; accept weaker detections.
     static let signalConfidence: Float = 0.3
+    /// People are YOLO's most common false alarm (posters, reflections, mannequins, shadows): be stricter.
+    static let personConfidence: Float = 0.65
+
+    static func minimumConfidence(for identifier: String) -> Float {
+        switch identifier {
+        case "traffic light": signalConfidence
+        case "person": personConfidence
+        default: minimumConfidence
+        }
+    }
+
+    /// Whether a measured distance fits the box's size. Something that would have to be far smaller or
+    /// larger than usual is probably a false detection (a person on a poster) or a bad depth reading
+    /// (LiDAR hitting something in front of a distant person). Boxes cut off by the frame always fit.
+    static func sizeFits(typicalHeight: Double, distance: Double, boxHeightPixels: Double,
+                         focalLengthPixels: Double, touchesEdge: Bool) -> Bool {
+        guard !touchesEdge, typicalHeight >= 0.5, focalLengthPixels > 0 else { return true }
+        let impliedHeight = boxHeightPixels / focalLengthPixels * distance
+        return (0.35 * typicalHeight...2.2 * typicalHeight).contains(impliedHeight)
+    }
 
     static func entry(for identifier: String) -> Entry? {
         entries[identifier.lowercased()]

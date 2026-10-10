@@ -10,12 +10,13 @@ alter table public.osm_access_points add constraint osm_access_points_kind_check
 alter table public.osm_access_points add column if not exists entrance text;
 alter table public.osm_access_points add column if not exists door text;
 
--- The best entrance near a destination: main entrances first, then the closest. Skips entrances
+-- The best entrance near a destination: the closest one, with main entrances counted 15 m closer
+-- (a far "main" entrance may belong to a neighboring building). Skips entrances
 -- people can't use to go in (service, emergency, exit-only, garage).
 create or replace function public.nearest_entrance(
   p_latitude double precision,
   p_longitude double precision,
-  p_radius_m double precision default 60
+  p_radius_m double precision default 45
 )
 returns table (
   osm_id bigint, latitude double precision, longitude double precision,
@@ -37,7 +38,7 @@ as $$
   where p.kind = 'entrance'
     and coalesce(p.entrance, 'yes') not in ('service', 'emergency', 'exit', 'garage', 'no')
     and extensions.st_dwithin(p.geom, t.g, p_radius_m)
-  order by (p.entrance = 'main') desc nulls last, extensions.st_distance(p.geom, t.g)
+  order by extensions.st_distance(p.geom, t.g) - case when p.entrance = 'main' then 15 else 0 end
   limit 1
 $$;
 

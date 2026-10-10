@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
 
   try {
     // End at the building's door when OSM knows where it is.
-    const entrance = (await rpc<Entrance[]>("nearest_entrance", { p_latitude: dest.lat, p_longitude: dest.lon, p_radius_m: 60 }))?.[0] ?? null;
+    const entrance = (await rpc<Entrance[]>("nearest_entrance", { p_latitude: dest.lat, p_longitude: dest.lon, p_radius_m: 45 }))?.[0] ?? null;
     if (entrance) dest = { lat: entrance.latitude, lon: entrance.longitude };
 
     let relaxed = false;
@@ -220,6 +220,23 @@ Deno.serve(async (req) => {
   }
 });
 
+/**
+ * Valhalla runs either self-hosted (VALHALLA_URL only, e.g. the Docker container on the Mac) or on
+ * Stadia Maps' hosted Valhalla (VALHALLA_URL=https://api.stadiamaps.com plus VALHALLA_API_KEY), which
+ * takes the same requests at versioned paths.
+ */
+function valhallaEndpoint(base: string, action: "route" | "trace_attributes"): string {
+  const root = base.replace(/\/$/, "");
+  return Deno.env.get("VALHALLA_API_KEY") ? `${root}/${action}/v1` : `${root}/${action}`;
+}
+
+function valhallaHeaders(): HeadersInit {
+  const key = Deno.env.get("VALHALLA_API_KEY");
+  return key
+    ? { "Content-Type": "application/json", Authorization: `Stadia-Auth ${key}` }
+    : { "Content-Type": "application/json" };
+}
+
 async function valhallaRoute(
   base: string,
   origin: { lat: number; lon: number },
@@ -227,9 +244,9 @@ async function valhallaRoute(
   prefs: Preferences,
   relaxed: boolean,
 ): Promise<ValhallaTrip | null> {
-  const res = await upstream(`${base.replace(/\/$/, "")}/route`, {
+  const res = await upstream(valhallaEndpoint(base, "route"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: valhallaHeaders(),
     body: JSON.stringify({
       locations: [
         { lat: origin.lat, lon: origin.lon, type: "break" },
@@ -248,9 +265,9 @@ async function valhallaRoute(
 /** OSM `use` of every edge on the route (sidewalk, footway, steps, elevator, crossing, ...). */
 async function edgeUses(base: string, encodedShape: string, prefs: Preferences, relaxed: boolean): Promise<RouteEdge[]> {
   try {
-    const res = await upstream(`${base.replace(/\/$/, "")}/trace_attributes`, {
+    const res = await upstream(valhallaEndpoint(base, "trace_attributes"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: valhallaHeaders(),
       body: JSON.stringify({
         encoded_polyline: encodedShape,
         shape_match: "edge_walk",

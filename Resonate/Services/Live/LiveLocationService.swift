@@ -56,7 +56,9 @@ final class LiveLocationService: NSObject, LocationServicing, CLLocationManagerD
                         continuation.yield(LocationFix(
                             point: GeoPoint(location.coordinate),
                             accuracy: location.horizontalAccuracy,
-                            timestamp: location.timestamp
+                            timestamp: location.timestamp,
+                            course: location.course >= 0 && location.courseAccuracy >= 0 && location.courseAccuracy <= 45 ? location.course : nil,
+                            speed: location.speed >= 0 ? location.speed : nil
                         ))
                     }
                 } catch {

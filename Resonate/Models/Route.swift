@@ -116,7 +116,7 @@ nonisolated struct RouteHazard: Hashable, Codable, Sendable {
 
     var spoken: String {
         switch kind {
-        case .raisedCurb: "Raised curb ahead. Check the edge with your cane."
+        case .raisedCurb: "Raised curb ahead. Watch the edge."
         case .steps: "Steps ahead."
         }
     }

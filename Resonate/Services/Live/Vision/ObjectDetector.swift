@@ -42,8 +42,7 @@ nonisolated final class ObjectDetector: @unchecked Sendable {
             return []
         }
         return (request.results as? [VNRecognizedObjectObservation] ?? []).compactMap { observation in
-            guard let top = observation.labels.first,
-                  top.confidence >= (top.identifier == "traffic light" ? ObjectCatalog.signalConfidence : ObjectCatalog.minimumConfidence)
+            guard let top = observation.labels.first, top.confidence >= ObjectCatalog.minimumConfidence(for: top.identifier)
             else { return nil }
             let box = observation.boundingBox // bottom-left origin
             return RawDetection(
@@ -83,12 +82,28 @@ nonisolated enum FrameAnalysis {
         detections.compactMap { detection in
             guard let entry = ObjectCatalog.entry(for: detection.identifier) else { return nil }
             let touchesEdge = detection.box.minY < 0.01 || detection.box.maxY > 0.99
-            let distance = depth(detection.box) ?? ObjectCatalog.estimatedDistance(
+            let boxHeightPixels = detection.box.height * imageHeightPixels
+            let estimate = ObjectCatalog.estimatedDistance(
                 typicalHeight: entry.typicalHeight,
-                boxHeightPixels: detection.box.height * imageHeightPixels,
+                boxHeightPixels: boxHeightPixels,
                 focalLengthPixels: focalLengthPixels,
                 touchesEdge: touchesEdge
             )
+            var distance = estimate
+            if let measured = depth(detection.box) {
+                if ObjectCatalog.sizeFits(typicalHeight: entry.typicalHeight, distance: measured, boxHeightPixels: boxHeightPixels,
+                                          focalLengthPixels: focalLengthPixels, touchesEdge: touchesEdge) {
+                    distance = measured
+                } else if entry.category == .person, measured < (estimate ?? 0) * 0.5 {
+                    // LiDAR hit something in front of a far-away person: trust the size instead.
+                    distance = estimate
+                } else if entry.category == .person {
+                    // A "person" the wrong size for where it is: most likely not a person.
+                    return nil
+                } else {
+                    distance = measured
+                }
+            }
             let center = CGPoint(x: detection.box.midX, y: detection.box.midY)
             // Pinhole: sideways offset = pixels from center ÷ focal length × distance.
             let lateral = distance.map { Double(center.x - 0.5) * imageWidthPixels / focalLengthPixels * $0 }

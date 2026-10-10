@@ -49,7 +49,7 @@ struct LoginView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Obstacle alerts and routes work without an account. Your saved places stay on this phone until you sign in.")
-                    Text("Resonate adds to your cane or guide dog. It doesn't replace them.")
+                    Text("Resonate is an extra aid. It doesn't replace the tools you already use to get around.")
                 }
                 .appFont(.footnote)
                 .foregroundStyle(Palette.textMuted)

@@ -75,6 +75,10 @@ nonisolated struct ObstacleTracker {
     /// Small things (chairs, signs) only matter this close.
     static let minorRange = 2.5
     static let stopRange = 1.5
+    /// People see you and step aside: "Stop" only when someone is right in front.
+    static let personStopRange = 1.0
+    /// …and they're mentioned from a little closer than things that don't move out of the way.
+    static let personRange = 3.0
     static let edgeStopRange = 2.0
     /// Things coming toward the user are watched farther out.
     static let approachRange = 6.0
@@ -126,7 +130,9 @@ nonisolated struct ObstacleTracker {
         tracks = tracks.compactMap { track in
             var track = track
             track.hits = Array(track.hits.suffix(Self.window))
-            if !track.isConfirmed && track.hits.filter({ $0 }).count >= Self.confirmHits { track.isConfirmed = true }
+            // People need one more sighting: they're the most common false alarm.
+            let needed = track.category == .person ? Self.confirmHits + 1 : Self.confirmHits
+            if !track.isConfirmed && track.hits.filter({ $0 }).count >= needed { track.isConfirmed = true }
             if track.isConfirmed {
                 guard now.timeIntervalSince(track.lastSeen) <= Self.keepAlive else { return nil }
             } else if !track.hits.suffix(3).contains(true) {
@@ -269,14 +275,16 @@ nonisolated struct ObstacleTracker {
         guard track.inPath else { return .background }
 
         let isEdge = track.category == .dropOff || track.category == .stairs
-        if distance <= stopRange || (isEdge && distance <= edgeStopRange) { return .urgent }
+        let stop = track.category == .person ? personStopRange : stopRange
+        if distance <= stop || (isEdge && distance <= edgeStopRange) { return .urgent }
         return distance <= range(for: track.category) ? .important : .background
     }
 
     /// Cars, bikes, people, poles, and edges matter from farther away than a chair.
     static func range(for category: ObjectCategory) -> Double {
         switch category {
-        case .vehicle, .person, .obstacle, .dropOff, .stairs: alertRange
+        case .person: personRange
+        case .vehicle, .obstacle, .dropOff, .stairs: alertRange
         case .furniture, .sign: minorRange
         case .wall, .door: 0
         }

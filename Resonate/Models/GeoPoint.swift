@@ -60,6 +60,10 @@ nonisolated struct LocationFix: Hashable, Sendable {
     /// Horizontal accuracy in meters (lower is better).
     var accuracy: Double
     var timestamp: Date
+    /// Direction of travel from GPS, compass degrees. Nil when standing still or unknown.
+    var course: Double? = nil
+    /// Meters per second. Nil when unknown.
+    var speed: Double? = nil
 }
 
 /// The only area Resonate has map data for: the US state of Georgia
