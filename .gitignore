@@ -5,6 +5,7 @@
 xcuserdata/
 DerivedData/
 *.xcuserstate
+Resonate.xcodeproj/project.pbxproj
 
 # Local app config (copy from config/ResonateConfig.example.plist)
 Resonate/Resources/ResonateConfig.plist
