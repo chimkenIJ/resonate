@@ -421,3 +421,9 @@ verify_jwt = false
 
 [functions.route]
 verify_jwt = false
+
+[functions.speak]
+verify_jwt = false
+
+[functions.describe]
+verify_jwt = false

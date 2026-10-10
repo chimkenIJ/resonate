@@ -68,10 +68,20 @@ protocol SpeechServicing: AnyObject {
     var isSpeaking: Bool { get }
     var lastSpoken: String? { get }
     /// Speaks `text`. A higher priority interrupts anything lower that is playing.
+    /// `fragments`, when given, are pre-recorded pieces that together say `text`; if they're all
+    /// on the phone they play immediately, without the network.
     /// Returns once the phrase is queued, not when it finishes, so callers never block on audio.
-    func speak(_ text: String, priority: SpeechPriority) async
+    func speak(_ text: String, priority: SpeechPriority, fragments: [String]?) async
     func stop()
     func repeatLast() async
+    /// Records phrases ahead of time (safety alerts), so they're ready offline.
+    func prewarm(_ phrases: [String]) async
+}
+
+extension SpeechServicing {
+    func speak(_ text: String, priority: SpeechPriority) async {
+        await speak(text, priority: priority, fragments: nil)
+    }
 }
 
 /// Voice input for destination search. Runs on-device so it works without a connection.

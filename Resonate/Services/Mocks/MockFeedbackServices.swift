@@ -9,7 +9,9 @@ final class MockSpeechService: SpeechServicing {
     private(set) var lastSpoken: String?
     private(set) var log: [(text: String, priority: SpeechPriority)] = []
 
-    func speak(_ text: String, priority: SpeechPriority) async {
+    func prewarm(_ phrases: [String]) async {}
+
+    func speak(_ text: String, priority: SpeechPriority, fragments: [String]?) async {
         log.append((text, priority))
         lastSpoken = text
         isSpeaking = true

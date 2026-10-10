@@ -32,6 +32,9 @@ final class AppModel {
 
     func bootstrap() async {
         guard phase == .launching else { return }
+        // Record the safety phrases in the app's voice in the background, so alerts work offline.
+        let speech = services.speech
+        Task { await speech.prewarm(SpeechPhrases.safety) }
         authState = await services.auth.restoreSession()
         await routeAfterAuth()
     }

@@ -152,3 +152,28 @@ OSM changes daily. Every week or so:
   "Take the stairs".
 - **GPS is 5–15 m off among Midtown's tall buildings.** Turn-by-turn widens its thresholds when accuracy
   is poor and waits 8 seconds before deciding you're off route.
+
+---
+
+## Voice (ElevenLabs) and scene descriptions (Gemini)
+
+Two more Edge Functions hold the third-party keys, so the keys never ship in the app:
+
+| Function | Calls | Notes |
+|---|---|---|
+| `speak` | ElevenLabs `eleven_flash_v2_5` | Returns MP3. About 0.3 s per phrase. Voice set by `ELEVENLABS_VOICE_ID` (default Matilda). |
+| `describe` | Gemini `gemini-3.5-flash-lite` | One JPEG in, 2–3 spoken sentences out, about 2 s. Thinking set to minimal. Photos aren't stored. |
+
+Keys for local use live in `supabase/functions/.env.local` (gitignored): `ELEVENLABS_API_KEY`,
+`ELEVENLABS_VOICE_ID`, `GEMINI_API_KEY`, `GEMINI_MODEL`. After editing it, rerun `server/scripts/dev_up.sh`.
+
+How the app uses the voice:
+
+- **Everything is spoken in the ElevenLabs voice.** Each phrase is generated once and saved on the phone,
+  so repeats are instant and free.
+- **Safety alerts never wait on the network.** On first launch the app records about 150 short pieces
+  ("Bike", "ahead, slightly left,", "2 meters.", "Step right to pass.") and builds every alert from them.
+  A unit test checks that every possible alert can be built from recorded pieces.
+- **Offline and not yet recorded:** the phone's built-in voice says it, so the user is never left in silence.
+- **Changing the voice:** set `ELEVENLABS_VOICE_ID`, then bump `voiceVersion` in `SpeechClipStore` so
+  old clips in the previous voice are re-recorded.

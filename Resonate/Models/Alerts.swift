@@ -40,6 +40,9 @@ nonisolated struct ObstacleAlert: Hashable, Sendable {
     var guidanceIcon: Maneuver
     /// Keeps the same obstacle from being announced over and over.
     var dedupeKey: String
+    /// The spoken text in reusable pieces ("Bike", "ahead, slightly left,", "2 meters.", "Step right to pass.").
+    /// Each piece is pre-recorded in the app's voice, so alerts play instantly and offline.
+    var fragments: [String]? = nil
 
     var spokenText: String { "\(headline) \(guidance)" }
 }
@@ -62,7 +65,8 @@ nonisolated enum ObstacleAlertComposer {
         let isEdge = nearest.category == .dropOff || nearest.category == .stairs
         let severity: AlertSeverity = distance <= stopRange || (isEdge && distance <= 2) ? .stop : .headsUp
         let direction = nearest.direction
-        let headline = "\(nearest.label) \(direction.spoken), \(DistanceText.spoken(distance))."
+        let distanceText = DistanceText.spoken(distance)
+        let headline = "\(nearest.label) \(direction.spoken), \(distanceText)."
 
         let guidance: String
         let icon: Maneuver
@@ -89,7 +93,8 @@ nonisolated enum ObstacleAlertComposer {
             headline: headline,
             guidance: guidance,
             guidanceIcon: icon,
-            dedupeKey: "\(nearest.label)-\(direction.rawValue)"
+            dedupeKey: "\(nearest.label)-\(direction.rawValue)",
+            fragments: [nearest.label, "\(direction.spoken),", "\(distanceText).", guidance]
         )
     }
 

@@ -170,9 +170,8 @@ nonisolated enum IndoorComposer {
         }
         let severity: AlertSeverity = closest.distance <= 0.8 ? .stop : .headsUp
         let isStairs = closest.element.category == .stairs
-        let headline = closest.distance <= 0.8
-            ? "\(closest.element.label) right in front of you."
-            : "\(closest.element.label) \(steps(closest.distance)) ahead."
+        let place = closest.distance <= 0.8 ? "right in front of you." : "\(steps(closest.distance)) ahead."
+        let headline = "\(closest.element.label) \(place)"
         let guidance: String
         if isStairs {
             guidance = "Stairs. Find the railing and check each step with your cane."
@@ -182,7 +181,8 @@ nonisolated enum IndoorComposer {
             guidance = closest.nearest.y <= 0 ? "Step right to pass." : "Step left to pass."
         }
         return ObstacleAlert(severity: isStairs ? .stop : severity, headline: headline, guidance: guidance,
-                             guidanceIcon: .straight, dedupeKey: "indoor-\(closest.element.label)")
+                             guidanceIcon: .straight, dedupeKey: "indoor-\(closest.element.label)",
+                             fragments: [closest.element.label, place, guidance])
     }
 
     // MARK: Mini map (user at bottom center facing up)

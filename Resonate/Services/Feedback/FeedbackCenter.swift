@@ -38,7 +38,7 @@ final class FeedbackCenter {
         let channels = preferences.alertChannels
         if channels.contains(.buzzes), let cue = alert.severity.hapticCue { haptics.play(cue) }
         if channels.contains(.tones) { tones.play(alert.severity == .stop ? .stop : .headsUp) }
-        if channels.contains(.voice) { await speech.speak(alert.spokenText, priority: .safety) }
+        if channels.contains(.voice) { await speech.speak(alert.spokenText, priority: .safety, fragments: alert.fragments) }
         return true
     }
 
@@ -48,6 +48,14 @@ final class FeedbackCenter {
         if preferences.alertChannels.contains(.voice) || priority == .info {
             await speech.speak(text, priority: priority)
         }
+    }
+
+    /// Speaks `text` only the first time `key` is seen on this phone (one-time notices).
+    func announceOnce(key: String, _ text: String) async {
+        let defaultsKey = "notice.\(key)"
+        guard !UserDefaults.standard.bool(forKey: defaultsKey) else { return }
+        UserDefaults.standard.set(true, forKey: defaultsKey)
+        await speech.speak(text, priority: .info)
     }
 
     func repeatLast() async {

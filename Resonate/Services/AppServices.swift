@@ -40,8 +40,9 @@ struct AppServices {
         )
     }
 
-    /// Real accounts, saved places, location, search, routing, voice input, obstacle detection,
-    /// indoor scanning, haptics, and tones. Voice output and scene descriptions stay mocked until step 7.
+    /// Everything real: accounts, saved places, location, search, routing, the ElevenLabs voice,
+    /// voice input, obstacle detection, indoor scanning, Gemini descriptions, haptics, and tones.
+    /// Only color recognition is still a mock.
     static func live(config: AppConfig) -> AppServices {
         let mock = AppServices.mock()
         let auth = Auth0AuthService(config: config)
@@ -63,14 +64,14 @@ struct AppServices {
             location: LiveLocationService(),
             geocoding: LiveGeocodingService(client: functions),
             routing: LiveRoutingService(client: functions),
-            speech: mock.speech,
+            speech: ElevenLabsSpeechService(client: functions),
             speechRecognition: LiveSpeechRecognitionService(),
             haptics: LiveHapticsService(),
             tones: LiveTonesService(),
             obstacleDetection: LiDARObstacleDetectionService.isSupported
                 ? LiDARObstacleDetectionService() : CameraObstacleDetectionService(),
             indoorScan: RoomScanService(),
-            sceneDescription: mock.sceneDescription,
+            sceneDescription: GeminiSceneDescriptionService(client: functions),
             colorRecognition: mock.colorRecognition
         )
     }

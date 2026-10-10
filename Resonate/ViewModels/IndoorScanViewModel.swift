@@ -80,6 +80,7 @@ final class IndoorScanViewModel {
         guard !isDescribing else { return }
         isDescribing = true
         defer { isDescribing = false }
+        await feedback.announceOnce(key: "gemini", "Describing sends one photo to Google Gemini to put it into words. Resonate doesn't save it.")
         await feedback.announce("Looking around the room.", priority: .info)
         do {
             guard let jpeg = await scanner.latestFrameJPEG() else { throw AppError.server(message: "The camera isn't ready yet.") }

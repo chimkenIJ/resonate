@@ -29,11 +29,16 @@ final class EdgeFunctionClient {
     }
 
     func post<Body: Encodable & Sendable, Response: Decodable & Sendable>(
-        _ function: String, body: Body, as: Response.Type
+        _ function: String, body: Body, as: Response.Type, timeout: TimeInterval = 20
     ) async throws -> Response {
+        try JSONDecoder.snakeCase.decode(Response.self, from: await postForData(function, body: body, timeout: timeout))
+    }
+
+    /// Raw response body (for audio).
+    func postForData<Body: Encodable & Sendable>(_ function: String, body: Body, timeout: TimeInterval = 20) async throws -> Data {
         var request = URLRequest(url: baseURL.appending(path: function))
         request.httpMethod = "POST"
-        request.timeoutInterval = 20
+        request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "apikey")
         if let token = try? await auth.accessToken() {
@@ -62,7 +67,7 @@ final class EdgeFunctionClient {
             if body?.error == "outside_georgia" { throw AppError.outsideGeorgia }
             throw AppError.server(message: body?.message ?? "Something went wrong. Try again in a moment.")
         }
-        return try JSONDecoder.snakeCase.decode(Response.self, from: data)
+        return data
     }
 }
 
