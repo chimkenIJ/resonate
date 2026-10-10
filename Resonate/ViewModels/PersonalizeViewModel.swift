@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Observation
 
 /// Backs both onboarding (Personalize) and the Settings tab.
@@ -62,6 +63,7 @@ final class PersonalizeViewModel {
             try await save(updated)
             base = updated
         } catch {
+            Log.data.error("Couldn't save preferences: \(String(describing: error), privacy: .public)")
             message = "Couldn't save your choices. Try again."
         }
     }

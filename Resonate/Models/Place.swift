@@ -49,6 +49,18 @@ nonisolated struct PlaceFolder: Identifiable, Codable, Hashable, Sendable {
     var placeCount: Int
 
     var countText: String { placeCount == 1 ? "1 route" : "\(placeCount) routes" }
+
+    /// Folders every new user starts with. Matches `ensure_user()` in the Supabase migration.
+    static func starterFolders() -> [PlaceFolder] {
+        [
+            PlaceFolder(id: UUID(), name: "Classes", accent: .slate, icon: .classes, placeCount: 0),
+            PlaceFolder(id: UUID(), name: "Home", accent: .sand, icon: .home, placeCount: 0),
+            PlaceFolder(id: UUID(), name: "Food", accent: .clay, icon: .food, placeCount: 0),
+            PlaceFolder(id: UUID(), name: "Gym", accent: .mauve, icon: .gym, placeCount: 0),
+            PlaceFolder(id: UUID(), name: "Friends", accent: .rose, icon: .friends, placeCount: 0),
+            PlaceFolder(id: UUID(), name: "Errands", accent: .sage, icon: .errands, placeCount: 0),
+        ]
+    }
 }
 
 /// A place saved into a folder, with the last known route summary.

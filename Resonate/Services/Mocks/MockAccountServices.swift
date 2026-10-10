@@ -22,6 +22,11 @@ final class MockAuthService: AuthServicing {
     }
 }
 
+final class MockUserProfileService: UserProfileServicing {
+    private(set) var ensured: [UserAccount] = []
+    func ensureUser(_ account: UserAccount) async throws { ensured.append(account) }
+}
+
 final class MockPreferencesService: PreferencesServicing {
     private var stored: UserPreferences?
 

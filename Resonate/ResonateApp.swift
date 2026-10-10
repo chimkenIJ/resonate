@@ -9,13 +9,14 @@ import SwiftUI
 
 @main
 struct ResonateApp: App {
-    /// Mock services until the real ones land in build steps 3–7.
-    @State private var app = AppModel(services: .mock())
+    /// Live services when ResonateConfig.plist is filled in, mocks otherwise.
+    @State private var app = AppModel(services: .makeDefault())
 
     init() {
         #if DEBUG
         if let screen = ProcessInfo.processInfo.environment["RESONATE_SCREEN"] {
-            _app = State(initialValue: .debugLaunch(screen: screen))
+            let live = ProcessInfo.processInfo.environment["RESONATE_LIVE"] == "1"
+            _app = State(initialValue: .debugLaunch(screen: screen, live: live))
         }
         #endif
     }

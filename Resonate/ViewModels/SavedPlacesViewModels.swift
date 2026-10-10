@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Observation
 
 @Observable
@@ -19,6 +20,7 @@ final class SavedPlacesViewModel {
             folders = try await service.folders()
             errorMessage = nil
         } catch {
+            Log.data.error("Couldn't load folders: \(String(describing: error), privacy: .public)")
             errorMessage = "Couldn't load your saved places."
         }
     }

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Copy to Resonate/Resources/ResonateConfig.plist (gitignored) and fill in.
+  These are public client values, not secrets. Leave any YOUR_ placeholder and the app runs on mocks.
+-->
+<plist version="1.0">
+<dict>
+	<key>SupabaseURL</key>
+	<string>https://YOUR_PROJECT_REF.supabase.co</string>
+	<key>SupabaseKey</key>
+	<string>YOUR_SUPABASE_PUBLISHABLE_KEY</string>
+	<key>Auth0Domain</key>
+	<string>YOUR_TENANT.us.auth0.com</string>
+	<key>Auth0ClientID</key>
+	<string>YOUR_AUTH0_NATIVE_APP_CLIENT_ID</string>
+	<key>Auth0Audience</key>
+	<string>https://api.resonate.app</string>
+	<!-- Optional, for local testing with `supabase functions serve`. Remove both to use the hosted functions. -->
+	<!-- <key>FunctionsURL</key><string>http://127.0.0.1:54321/functions/v1</string> -->
+	<!-- <key>FunctionsKey</key><string>LOCAL_PUBLISHABLE_KEY_FROM_supabase_status</string> -->
+</dict>
+</plist>

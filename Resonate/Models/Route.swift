@@ -12,7 +12,7 @@ nonisolated struct RoutingPreferences: Codable, Hashable, Sendable {
 /// A walking turn in the route.
 nonisolated enum Maneuver: String, Codable, Hashable, Sendable {
     case depart, straight, slightLeft, left, sharpLeft, slightRight, right, sharpRight
-    case uTurn, crossing, audioCrossing, elevator, ramp, arrive
+    case uTurn, crossing, audioCrossing, elevator, steps, ramp, arrive
 
     var systemImage: String {
         switch self {
@@ -26,6 +26,7 @@ nonisolated enum Maneuver: String, Codable, Hashable, Sendable {
         case .crossing: "figure.walk"
         case .audioCrossing: "speaker.wave.2"
         case .elevator: "arrow.up.arrow.down"
+        case .steps: "figure.stairs"
         case .ramp: "arrow.up.forward"
         case .arrive: "flag.checkered"
         }
@@ -35,6 +36,7 @@ nonisolated enum Maneuver: String, Codable, Hashable, Sendable {
         switch self {
         case .audioCrossing, .crossing: .mauve
         case .elevator: .sage
+        case .steps: .clay
         case .arrive: .sand
         default: .slate
         }
@@ -43,11 +45,19 @@ nonisolated enum Maneuver: String, Codable, Hashable, Sendable {
 
 nonisolated struct RouteStep: Identifiable, Codable, Hashable, Sendable {
     var id: Int
+    /// Short text for the screen: "Turn right onto Plum Street".
     var instruction: String
+    /// Distance from this maneuver to the next one.
     var distanceMeters: Double
     var maneuver: Maneuver
-    /// Point where this step starts, used to trigger the spoken instruction.
+    /// Point where this maneuver happens, used to trigger the spoken instruction.
     var start: GeoPoint
+    /// Fuller sentence to speak at the maneuver, including crossing and curb notes.
+    var spokenInstruction: String? = nil
+    /// Short form to speak a little before the maneuver: "Turn right onto Plum Street."
+    var alertInstruction: String? = nil
+
+    var spoken: String { spokenInstruction ?? "\(instruction)." }
 }
 
 /// Accessibility features along a route, shown as chips under the summary.
@@ -57,7 +67,8 @@ nonisolated enum RouteFeature: Codable, Hashable, Sendable {
     case tactilePaving
     case elevators(Int)
     case steps(Int)
-    /// Some segments have no sidewalk or kerb tags in OSM, so we can't promise they're step-free.
+    case raisedCurbs(Int)
+    /// Some crossings have no kerb tag in OSM, so we can't promise a curb ramp there.
     case unverifiedSegments
 
     var label: String {
@@ -67,7 +78,8 @@ nonisolated enum RouteFeature: Codable, Hashable, Sendable {
         case .tactilePaving: "Tactile paving"
         case .elevators(let n): n == 1 ? "1 elevator" : "\(n) elevators"
         case .steps(let n): n == 1 ? "1 set of steps" : "\(n) sets of steps"
-        case .unverifiedSegments: "Some parts unverified"
+        case .raisedCurbs(let n): n == 1 ? "1 raised curb" : "\(n) raised curbs"
+        case .unverifiedSegments: "Some curbs unverified"
         }
     }
 
@@ -77,7 +89,7 @@ nonisolated enum RouteFeature: Codable, Hashable, Sendable {
         case .audioCrossings: .mauve
         case .tactilePaving: .slate
         case .elevators: .sage
-        case .steps: .clay
+        case .steps, .raisedCurbs: .clay
         case .unverifiedSegments: .rose
         }
     }
@@ -90,6 +102,24 @@ nonisolated struct AvoidedHazard: Identifiable, Codable, Hashable, Sendable {
     var coordinate: GeoPoint
 }
 
+/// Something to warn about while walking the route.
+nonisolated struct RouteHazard: Hashable, Codable, Sendable {
+    nonisolated enum Kind: String, Codable, Sendable {
+        case raisedCurb = "raised_curb"
+        case steps
+    }
+
+    var kind: Kind
+    var coordinate: GeoPoint
+
+    var spoken: String {
+        switch kind {
+        case .raisedCurb: "Raised curb ahead. Check the edge with your cane."
+        case .steps: "Steps ahead."
+        }
+    }
+}
+
 nonisolated struct Route: Identifiable, Codable, Hashable, Sendable {
     var id: UUID
     var destination: Place
@@ -100,6 +130,17 @@ nonisolated struct Route: Identifiable, Codable, Hashable, Sendable {
     var steps: [RouteStep]
     var polyline: [GeoPoint]
     var avoided: [AvoidedHazard]
+    var hazards: [RouteHazard] = []
+
+    /// Meters from `point` to the nearest part of the route line.
+    func distanceFromPath(_ point: GeoPoint) -> Double {
+        guard polyline.count > 1 else {
+            return polyline.first.map(point.distance(to:)) ?? .infinity
+        }
+        return zip(polyline, polyline.dropFirst())
+            .map { point.distance(toSegmentFrom: $0, to: $1) }
+            .min() ?? .infinity
+    }
 
     /// "12 min · step-free"
     var summary: String {

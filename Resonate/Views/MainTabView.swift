@@ -64,7 +64,12 @@ struct MainTabView: View {
     private func coverView(_ cover: CoverRoute) -> some View {
         switch cover {
         case .walk(let route):
-            WalkView(model: WalkViewModel(mode: route.map { .navigating($0) } ?? .freeWalk, services: app.services, feedback: app.feedback))
+            WalkView(model: WalkViewModel(
+                mode: route.map { .navigating($0) } ?? .freeWalk,
+                services: app.services,
+                feedback: app.feedback,
+                routingPreferences: app.preferences.routing
+            ))
         case .indoor:
             IndoorScanView(model: IndoorScanViewModel(services: app.services, feedback: app.feedback))
         case .colors:

@@ -47,10 +47,17 @@ final class DestinationSearchViewModel {
         listenTask = Task { await listen() }
     }
 
+    /// Mic off now; searches for whatever was heard so far.
     func stopListening() {
         recognizer.stop()
+    }
+
+    /// Mic off and nothing searched (for example, leaving the screen).
+    func cancelListening() {
+        guard isListening else { return }
+        recognizer.cancel()
         listenTask?.cancel()
-        if phase == .listening { phase = .idle }
+        phase = .idle
     }
 
     func search() async {

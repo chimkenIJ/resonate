@@ -29,6 +29,27 @@ nonisolated struct GeoPoint: Codable, Hashable, Sendable {
         let a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
         return earthRadius * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
+
+    /// Meters to the closest point on the segment a–b. Uses a flat projection, accurate at walking scale.
+    func distance(toSegmentFrom a: GeoPoint, to b: GeoPoint) -> Double {
+        let metersPerDegreeLat = 111_320.0
+        let metersPerDegreeLon = 111_320.0 * cos(latitude * .pi / 180)
+        let ax = (a.longitude - longitude) * metersPerDegreeLon, ay = (a.latitude - latitude) * metersPerDegreeLat
+        let bx = (b.longitude - longitude) * metersPerDegreeLon, by = (b.latitude - latitude) * metersPerDegreeLat
+        let dx = bx - ax, dy = by - ay
+        let lengthSquared = dx * dx + dy * dy
+        let t = lengthSquared == 0 ? 0 : max(0, min(1, -(ax * dx + ay * dy) / lengthSquared))
+        let px = ax + t * dx, py = ay + t * dy
+        return (px * px + py * py).squareRoot()
+    }
+}
+
+/// One GPS reading.
+nonisolated struct LocationFix: Hashable, Sendable {
+    var point: GeoPoint
+    /// Horizontal accuracy in meters (lower is better).
+    var accuracy: Double
+    var timestamp: Date
 }
 
 /// The only area Resonate has map data for: the US state of Georgia

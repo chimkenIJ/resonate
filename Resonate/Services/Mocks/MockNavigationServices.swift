@@ -7,13 +7,13 @@ final class MockLocationService: LocationServicing {
 
     func currentLocation() async throws -> GeoPoint { location }
 
-    func updates() -> AsyncStream<GeoPoint> {
+    func updates() -> AsyncStream<LocationFix> {
         let start = location
         return AsyncStream { continuation in
             let task = Task {
                 var point = start
                 while !Task.isCancelled {
-                    continuation.yield(point)
+                    continuation.yield(LocationFix(point: point, accuracy: 5, timestamp: .now))
                     point.latitude -= 0.00005 // about 5 m south per tick
                     try? await Task.sleep(for: .seconds(2))
                 }

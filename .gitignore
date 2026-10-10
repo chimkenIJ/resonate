@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# Local app config (copy from config/ResonateConfig.example.plist)
+Resonate/Resources/ResonateConfig.plist
+
+# Supabase CLI local state
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# Map server secrets
+server/.env
+supabase/functions/.env.local

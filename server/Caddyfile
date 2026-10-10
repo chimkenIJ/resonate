@@ -1,0 +1,13 @@
+# Public entry point. HTTPS certificates are automatic for {$DOMAIN}.
+{$DOMAIN} {
+	@unauthorized not header X-Resonate-Key {$RESONATE_UPSTREAM_KEY}
+	respond @unauthorized "Unauthorized" 401
+
+	handle_path /valhalla/* {
+		reverse_proxy valhalla:8002
+	}
+	handle_path /nominatim/* {
+		reverse_proxy nominatim:8080
+	}
+	respond 404
+}

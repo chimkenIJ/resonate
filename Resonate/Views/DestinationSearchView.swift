@@ -28,9 +28,9 @@ struct DestinationSearchView: View {
                         .accessibilityLabel("Place name")
 
                     IconCircleButton(
-                        systemImage: model.isListening ? "stop.fill" : "mic.fill",
-                        accessibilityLabel: model.isListening ? "Stop listening" : "Say a place",
-                        style: .accent(.sand)
+                        systemImage: model.isListening ? "mic.slash.fill" : "mic.fill",
+                        accessibilityLabel: model.isListening ? "Turn off microphone" : "Turn on microphone and say a place",
+                        style: model.isListening ? .accent(.clay) : .accent(.sand)
                     ) {
                         isFieldFocused = false
                         model.toggleListening()
@@ -52,6 +52,8 @@ struct DestinationSearchView: View {
             .padding(.bottom, 32)
         }
         .scrollDismissesKeyboard(.interactively)
+        // Never leave the microphone on behind another screen.
+        .onDisappear { model.cancelListening() }
         .background(Palette.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task(id: app.router.listenRequest) {
@@ -70,17 +72,23 @@ struct DestinationSearchView: View {
                 .appFont(.body)
                 .foregroundStyle(Palette.textMuted)
         case .listening:
-            HStack(spacing: 12) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 24, weight: .semibold))
-                    .symbolEffect(.variableColor.iterative)
-                    .foregroundStyle(Accent.sand.color)
-                    .accessibilityHidden(true)
-                Text(model.query.isEmpty ? "Listening…" : model.query)
-                    .appFont(.rowTitle)
-                    .foregroundStyle(Palette.textPrimary)
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 24, weight: .semibold))
+                        .symbolEffect(.variableColor.iterative)
+                        .foregroundStyle(Accent.sand.color)
+                        .accessibilityHidden(true)
+                    Text(model.query.isEmpty ? "Microphone on. Say a place." : model.query)
+                        .appFont(.rowTitle)
+                        .foregroundStyle(Palette.textPrimary)
+                }
+                .accessibilityElement(children: .combine)
+                PillButton(title: "Turn off microphone", systemImage: "mic.slash.fill", kind: .accent(.clay),
+                           accessibilityHint: "Stops listening and searches for what you said") {
+                    model.stopListening()
+                }
             }
-            .accessibilityElement(children: .combine)
         case .searching:
             HStack(spacing: 12) {
                 ProgressView().tint(Palette.textPrimary)

@@ -1,0 +1,74 @@
+# Resonate map server: Valhalla (accessible walking routes) + Nominatim (place search),
+# both built from the Geofabrik extract of the US state of Georgia.
+#
+# The services are never exposed directly. Caddy is the only public entry point and rejects any
+# request without the shared X-Resonate-Key header, which only the Supabase Edge Functions know.
+#
+#   cp .env.example .env    # set DOMAIN and RESONATE_UPSTREAM_KEY
+#   docker compose up -d    # first start downloads Georgia and builds: Valhalla ~20 min, Nominatim ~1 h
+#
+# Local development (Valhalla only; the other values are unused placeholders):
+#   DOMAIN=localhost RESONATE_UPSTREAM_KEY=dev NOMINATIM_DB_PASSWORD=dev docker compose up -d valhalla
+# then Valhalla answers on http://127.0.0.1:8002.
+
+name: resonate-maps
+
+services:
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted:3.9.1
+    restart: unless-stopped
+    environment:
+      tile_urls: https://download.geofabrik.de/north-america/us/georgia-latest.osm.pbf
+      # Elevation lets Valhalla respect max_grade, which matters for wheelchair and cane users.
+      build_elevation: "True"
+      build_admins: "True"
+      build_time_zones: "True"
+      serve_tiles: "True"
+      use_tiles_ignore_pbf: "True"
+      server_threads: "4"
+    volumes:
+      - valhalla-data:/custom_files
+    ports:
+      - "127.0.0.1:8002:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8002/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60m
+
+  nominatim:
+    image: mediagis/nominatim:5.3.2
+    restart: unless-stopped
+    environment:
+      PBF_URL: https://download.geofabrik.de/north-america/us/georgia-latest.osm.pbf
+      REPLICATION_URL: https://download.geofabrik.de/north-america/us/georgia-updates/
+      UPDATE_MODE: once
+      NOMINATIM_PASSWORD: ${NOMINATIM_DB_PASSWORD:?set NOMINATIM_DB_PASSWORD in .env}
+      IMPORT_WIKIPEDIA: "false"
+    shm_size: 1g
+    volumes:
+      - nominatim-data:/var/lib/postgresql/16/main
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  gateway:
+    image: caddy:2.11.7-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      RESONATE_UPSTREAM_KEY: ${RESONATE_UPSTREAM_KEY:?set RESONATE_UPSTREAM_KEY in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - valhalla
+      - nominatim
+
+volumes:
+  valhalla-data:
+  nominatim-data:
+  caddy-data:

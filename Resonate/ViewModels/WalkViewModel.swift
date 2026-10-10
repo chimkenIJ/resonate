@@ -2,6 +2,7 @@ import Foundation
 import Observation
 
 /// Outdoor walking: obstacle alerts always, plus spoken turn-by-turn when following a route.
+/// Turn-by-turn reroutes on its own when the user drifts off the route.
 @Observable
 final class WalkViewModel {
     enum Mode {
@@ -9,56 +10,56 @@ final class WalkViewModel {
         case navigating(Route)
     }
 
-    let mode: Mode
     private(set) var objects: [DetectedObject] = []
     private(set) var alert: ObstacleAlert?
-    private(set) var stepIndex = 0
-    private(set) var hasArrived = false
+    private(set) var navigation: NavigationEngine?
+    private(set) var isRerouting = false
     private(set) var sceneDescription: String?
     private(set) var isDescribing = false
 
     private let detection: any ObstacleDetectionServicing
     private let location: any LocationServicing
+    private let routing: any RoutingServicing
     private let describer: any SceneDescriptionServicing
     private let feedback: FeedbackCenter
+    private let routingPreferences: RoutingPreferences
+    private var lastRerouteAt: Date = .distantPast
 
-    /// How close (meters) the user must be to the next step's start before it is announced.
-    private let stepTriggerDistance = 12.0
+    /// Don't ask for a new route more often than this.
+    private let rerouteInterval: TimeInterval = 20
 
-    init(mode: Mode, services: AppServices, feedback: FeedbackCenter) {
-        self.mode = mode
+    init(mode: Mode, services: AppServices, feedback: FeedbackCenter, routingPreferences: RoutingPreferences = RoutingPreferences()) {
+        if case .navigating(let route) = mode {
+            navigation = NavigationEngine(route: route)
+        }
         self.detection = services.obstacleDetection
         self.location = services.location
+        self.routing = services.routing
         self.describer = services.sceneDescription
         self.feedback = feedback
+        self.routingPreferences = routingPreferences
     }
 
     // MARK: Display
 
-    var route: Route? {
-        if case .navigating(let route) = mode { return route }
-        return nil
-    }
-
-    var isNavigating: Bool { route != nil }
+    var route: Route? { navigation?.route }
+    var isNavigating: Bool { navigation != nil }
+    var hasArrived: Bool { navigation?.hasArrived ?? false }
     var backLabel: String { isNavigating ? "Back to route" : "Back to home" }
-    var tagText: String { alert?.severity.label ?? "All clear" }
-    var tagAccent: Accent { alert?.severity.accent ?? .sage }
+    var tagText: String { alert?.severity.label ?? (isRerouting ? "Rerouting" : "All clear") }
+    var tagAccent: Accent { alert?.severity.accent ?? (isRerouting ? .sand : .sage) }
     var deliveryText: String { feedback.preferences.deliveryDescription(for: alert?.severity ?? .headsUp) }
 
     var headline: String {
         if let alert { return alert.headline }
-        return hasArrived ? "You've arrived." : "Path looks clear ahead."
-    }
-
-    private var currentStep: RouteStep? {
-        guard let route, route.steps.indices.contains(stepIndex) else { return nil }
-        return route.steps[stepIndex]
+        if hasArrived { return "You've arrived." }
+        if isRerouting { return "Finding a new route." }
+        return "Path looks clear ahead."
     }
 
     var guidance: String {
         if let alert { return alert.guidance }
-        if let step = currentStep, !hasArrived {
+        if let step = navigation?.currentStep, !hasArrived {
             return step.distanceMeters > 0
                 ? "\(step.instruction). \(DistanceText.short(step.distanceMeters))."
                 : step.instruction
@@ -67,7 +68,7 @@ final class WalkViewModel {
     }
 
     var guidanceIcon: Maneuver {
-        alert?.guidanceIcon ?? currentStep?.maneuver ?? .straight
+        alert?.guidanceIcon ?? navigation?.currentStep?.maneuver ?? .straight
     }
 
     // MARK: Running
@@ -96,27 +97,51 @@ final class WalkViewModel {
     }
 
     private func followRoute() async {
-        guard let route, let first = route.steps.first else { return }
-        await feedback.announce(spoken(first), priority: .navigation)
+        guard let first = navigation?.route.steps.first else { return }
+        await feedback.announce(first.spoken, priority: .navigation)
 
-        for await point in location.updates() {
-            let next = stepIndex + 1
-            guard route.steps.indices.contains(next) else { break }
-            guard point.distance(to: route.steps[next].start) < stepTriggerDistance else { continue }
-
-            stepIndex = next
-            let step = route.steps[next]
-            if step.maneuver == .arrive {
-                hasArrived = true
-                await feedback.announce("You've arrived at \(route.destination.name).", priority: .navigation, haptic: .arrived)
-                break
+        for await fix in location.updates() {
+            guard var engine = navigation, !engine.hasArrived else { break }
+            let events = engine.update(fix)
+            navigation = engine
+            for event in events {
+                await handle(event, engine: engine, at: fix)
             }
-            await feedback.announce(spoken(step), priority: .navigation, haptic: haptic(for: step.maneuver))
         }
     }
 
-    private func spoken(_ step: RouteStep) -> String {
-        step.distanceMeters > 0 ? "\(step.instruction), \(DistanceText.spoken(step.distanceMeters))." : "\(step.instruction)."
+    private func handle(_ event: NavigationEngine.Event, engine: NavigationEngine, at fix: LocationFix) async {
+        let text = engine.announcement(for: event)
+        switch event {
+        case .offRoute:
+            await feedback.announce(text, priority: .navigation, haptic: .headsUp)
+            await reroute(from: fix.point)
+        case .reached(let index):
+            await feedback.announce(text, priority: .navigation, haptic: haptic(for: engine.route.steps[index].maneuver))
+        case .arrived:
+            await feedback.announce(text, priority: .navigation, haptic: .arrived)
+        case .hazardAhead:
+            await feedback.announce(text, priority: .safety, haptic: .headsUp)
+        case .approaching, .backOnRoute:
+            await feedback.announce(text, priority: .navigation)
+        }
+    }
+
+    private func reroute(from point: GeoPoint) async {
+        guard let destination = route?.destination, !isRerouting,
+              Date.now.timeIntervalSince(lastRerouteAt) >= rerouteInterval else { return }
+        isRerouting = true
+        lastRerouteAt = .now
+        defer { isRerouting = false }
+        do {
+            let fresh = try await routing.route(from: point, to: destination, preferences: routingPreferences)
+            navigation = NavigationEngine(route: fresh)
+            let first = fresh.steps.first.map { " \($0.spoken)" } ?? ""
+            await feedback.announce("New route.\(first)", priority: .navigation)
+        } catch {
+            let message = (error as? AppError)?.spokenMessage ?? "I couldn't find a new route. Keep to a safe spot and try again."
+            await feedback.announce(message, priority: .navigation)
+        }
     }
 
     private func haptic(for maneuver: Maneuver) -> HapticCue {

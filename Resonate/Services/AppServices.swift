@@ -1,9 +1,10 @@
 import Foundation
 
-/// All services the app uses, injected at the root. Swap `.mock()` for `.live()` per service as each
-/// real implementation lands.
+/// All services the app uses, injected at the root. `.live(config:)` uses real services where they
+/// exist so far and mocks for the rest; `.mock()` is fully offline for previews and development.
 struct AppServices {
     let auth: any AuthServicing
+    let users: any UserProfileServicing
     let preferences: any PreferencesServicing
     let savedPlaces: any SavedPlacesServicing
     let location: any LocationServicing
@@ -22,6 +23,7 @@ struct AppServices {
         let location = MockLocationService()
         return AppServices(
             auth: MockAuthService(),
+            users: MockUserProfileService(),
             preferences: MockPreferencesService(),
             savedPlaces: MockSavedPlacesService(),
             location: location,
@@ -36,5 +38,46 @@ struct AppServices {
             sceneDescription: MockSceneDescriptionService(),
             colorRecognition: MockColorRecognitionService()
         )
+    }
+
+    /// Real accounts, saved places, location, search, routing, and voice input.
+    /// Voice output and vision stay mocked until build steps 5–7.
+    static func live(config: AppConfig) -> AppServices {
+        let mock = AppServices.mock()
+        let auth = Auth0AuthService(config: config)
+        let client = SupabaseClientFactory.make(config: config, auth: auth)
+        let functions = EdgeFunctionClient(baseURL: config.functionsURL, apiKey: config.functionsKey, auth: auth)
+        return AppServices(
+            auth: auth,
+            users: SupabaseUserService(client: client),
+            preferences: AccountAwarePreferencesService(
+                auth: auth,
+                remote: SupabasePreferencesService(client: client, auth: auth),
+                local: LocalPreferencesService()
+            ),
+            savedPlaces: AccountAwareSavedPlacesService(
+                auth: auth,
+                remote: SupabaseSavedPlacesService(client: client),
+                local: LocalSavedPlacesService()
+            ),
+            location: LiveLocationService(),
+            geocoding: LiveGeocodingService(client: functions),
+            routing: LiveRoutingService(client: functions),
+            speech: mock.speech,
+            speechRecognition: LiveSpeechRecognitionService(),
+            haptics: mock.haptics,
+            tones: mock.tones,
+            obstacleDetection: mock.obstacleDetection,
+            indoorScan: mock.indoorScan,
+            sceneDescription: mock.sceneDescription,
+            colorRecognition: mock.colorRecognition
+        )
+    }
+
+    /// Live services when ResonateConfig.plist is filled in, otherwise mocks.
+    static func makeDefault() -> AppServices {
+        if let config = AppConfig.load() { return .live(config: config) }
+        print("[Resonate] ResonateConfig.plist missing or incomplete; running on mock services.")
+        return .mock()
     }
 }

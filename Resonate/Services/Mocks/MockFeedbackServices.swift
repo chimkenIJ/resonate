@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftUI
 
 /// Stands in for the ElevenLabs voice. Keeps a log, and when VoiceOver is running it posts
@@ -12,7 +13,7 @@ final class MockSpeechService: SpeechServicing {
         log.append((text, priority))
         lastSpoken = text
         isSpeaking = true
-        print("[speech:\(priority)] \(text)")
+        Log.speech.notice("[\(String(describing: priority), privacy: .public)] \(text, privacy: .public)")
         AccessibilityNotification.Announcement(text).post()
         isSpeaking = false
     }
@@ -48,6 +49,7 @@ final class MockSpeechRecognitionService: SpeechRecognitionServicing {
     }
 
     func stop() {}
+    func cancel() {}
 }
 
 final class MockHapticsService: HapticsServicing {

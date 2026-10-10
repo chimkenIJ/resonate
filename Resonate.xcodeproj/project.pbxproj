@@ -11,14 +11,30 @@
 		AC66B1063079A49A00413953 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = AC66B1043079A49A00413953 /* Supabase */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		AC66C2073079A49A00413953 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AC66A08C3079A49A00413953 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AC66A0933079A49A00413953;
+			remoteInfo = Resonate;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		AC66A0943079A49A00413953 /* Resonate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Resonate.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AC66C2013079A49A00413953 /* ResonateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ResonateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AC66A0963079A49A00413953 /* Resonate */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Resonate;
+			sourceTree = "<group>";
+		};
+		AC66C2023079A49A00413953 /* ResonateTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ResonateTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -33,6 +49,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AC66C2053079A49A00413953 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -40,6 +63,7 @@
 			isa = PBXGroup;
 			children = (
 				AC66A0963079A49A00413953 /* Resonate */,
+				AC66C2023079A49A00413953 /* ResonateTests */,
 				AC66A0953079A49A00413953 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -48,6 +72,7 @@
 			isa = PBXGroup;
 			children = (
 				AC66A0943079A49A00413953 /* Resonate.app */,
+				AC66C2013079A49A00413953 /* ResonateTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -79,6 +104,29 @@
 			productReference = AC66A0943079A49A00413953 /* Resonate.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AC66C2033079A49A00413953 /* ResonateTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AC66C20B3079A49A00413953 /* Build configuration list for PBXNativeTarget "ResonateTests" */;
+			buildPhases = (
+				AC66C2043079A49A00413953 /* Sources */,
+				AC66C2053079A49A00413953 /* Frameworks */,
+				AC66C2063079A49A00413953 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AC66C2083079A49A00413953 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AC66C2023079A49A00413953 /* ResonateTests */,
+			);
+			name = ResonateTests;
+			packageProductDependencies = (
+			);
+			productName = ResonateTests;
+			productReference = AC66C2013079A49A00413953 /* ResonateTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -92,6 +140,10 @@
 					AC66A0933079A49A00413953 = {
 						CreatedOnToolsVersion = 26.6;
 					};
+					AC66C2033079A49A00413953 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = AC66A0933079A49A00413953;
+					};
 				};
 			};
 			buildConfigurationList = AC66A08F3079A49A00413953 /* Build configuration list for PBXProject "Resonate" */;
@@ -104,7 +156,7 @@
 			mainGroup = AC66A08B3079A49A00413953;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				AC66B1013079A49A00413953 /* XCRemoteSwiftPackageReference "Auth0.swift" */,
+				AC66B1013079A49A00413953 /* XCRemoteSwiftPackageReference "Auth0" */,
 				AC66B1023079A49A00413953 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -113,12 +165,20 @@
 			projectRoot = "";
 			targets = (
 				AC66A0933079A49A00413953 /* Resonate */,
+				AC66C2033079A49A00413953 /* ResonateTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		AC66A0923079A49A00413953 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AC66C2063079A49A00413953 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +195,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AC66C2043079A49A00413953 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AC66C2083079A49A00413953 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AC66A0933079A49A00413953 /* Resonate */;
+			targetProxy = AC66C2073079A49A00413953 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AC66A09D3079A49C00413953 /* Debug */ = {
@@ -346,6 +421,50 @@
 			};
 			name = Release;
 		};
+		AC66C2093079A49A00413953 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = MRA5233N88;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ishajain.ResonateTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Resonate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Resonate";
+			};
+			name = Debug;
+		};
+		AC66C20A3079A49A00413953 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = MRA5233N88;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ishajain.ResonateTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Resonate.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Resonate";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -367,10 +486,19 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		AC66C20B3079A49A00413953 /* Build configuration list for PBXNativeTarget "ResonateTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC66C2093079A49A00413953 /* Debug */,
+				AC66C20A3079A49A00413953 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		AC66B1013079A49A00413953 /* XCRemoteSwiftPackageReference "Auth0.swift" */ = {
+		AC66B1013079A49A00413953 /* XCRemoteSwiftPackageReference "Auth0" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/auth0/Auth0.swift";
 			requirement = {
@@ -391,7 +519,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		AC66B1033079A49A00413953 /* Auth0 */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = AC66B1013079A49A00413953 /* XCRemoteSwiftPackageReference "Auth0.swift" */;
+			package = AC66B1013079A49A00413953 /* XCRemoteSwiftPackageReference "Auth0" */;
 			productName = Auth0;
 		};
 		AC66B1043079A49A00413953 /* Supabase */ = {

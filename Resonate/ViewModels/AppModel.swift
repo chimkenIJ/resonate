@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Observation
 
 /// App-wide state: which phase the user is in (login, onboarding, main app),
@@ -45,6 +46,9 @@ final class AppModel {
     func signIn() async throws {
         let user = try await services.auth.signIn()
         authState = .signedIn(user)
+        await syncAccount(user)
+        // Saved places and preferences now come from the account.
+        if let saved = await services.preferences.load() { preferences = saved }
     }
 
     func signOut() async {
@@ -65,6 +69,9 @@ final class AppModel {
             phase = .login
             return
         }
+        if case .signedIn(let user) = authState {
+            await syncAccount(user)
+        }
         if let saved = await services.preferences.load() {
             preferences = saved
             phase = .ready
@@ -72,12 +79,22 @@ final class AppModel {
             phase = .onboarding
         }
     }
+
+    /// Creates the Supabase user row and starter folders on first sign-in. Failure (for example,
+    /// offline) is fine: it runs again next launch, and on-device features never depend on it.
+    private func syncAccount(_ user: UserAccount) async {
+        do {
+            try await services.users.ensureUser(user)
+        } catch {
+            Log.account.error("Couldn't sync account: \(String(describing: error), privacy: .public)")
+        }
+    }
 }
 
 extension AppModel {
     /// For SwiftUI previews: mock services, already past login and onboarding.
-    static func preview(phase: Phase = .ready) -> AppModel {
-        let model = AppModel(services: .mock())
+    static func preview(phase: Phase = .ready, services: AppServices = .mock()) -> AppModel {
+        let model = AppModel(services: services)
         model.authState = .guest
         model.phase = phase
         return model
@@ -87,13 +104,15 @@ extension AppModel {
     /// Opens straight to one screen, for screenshots and UI checks.
     /// Run with the environment variable RESONATE_SCREEN set to: login, onboarding, home, search,
     /// listen, saved, folder, route, walk, navigate, indoor, colors, settings.
-    static func debugLaunch(screen: String) -> AppModel {
+    /// Add RESONATE_LIVE=1 to use the real services from ResonateConfig.plist instead of mocks.
+    static func debugLaunch(screen: String, live: Bool = false) -> AppModel {
+        let services: AppServices = live ? .makeDefault() : .mock()
         switch screen {
-        case "login": return AppModel(services: .mock())
-        case "onboarding": return preview(phase: .onboarding)
+        case "login": return AppModel(services: services)
+        case "onboarding": return preview(phase: .onboarding, services: services)
         default: break
         }
-        let model = preview()
+        let model = preview(services: services)
         let router = model.router
         switch screen {
         case "search": router.tab = .search
@@ -106,7 +125,18 @@ extension AppModel {
             router.tab = .saved
             router.paths[.saved] = [.folder(SampleData.folders[0]), .route(SampleData.classes[0].place)]
         case "walk": router.cover = .walk(nil)
-        case "navigate": router.cover = .walk(SampleData.route(to: SampleData.classes[0].place))
+        case "navigate":
+            if live {
+                // Fetch a real route, then open turn-by-turn on it.
+                Task {
+                    let here = (try? await services.location.currentLocation()) ?? SampleData.userLocation
+                    if let route = try? await services.routing.route(from: here, to: SampleData.classes[4].place, preferences: RoutingPreferences()) {
+                        router.cover = .walk(route)
+                    }
+                }
+            } else {
+                router.cover = .walk(SampleData.route(to: SampleData.classes[0].place))
+            }
         case "indoor": router.cover = .indoor
         case "colors":
             model.preferences.needs.insert(.colors)

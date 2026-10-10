@@ -17,6 +17,11 @@ protocol AuthServicing: AnyObject {
     func accessToken() async throws -> String?
 }
 
+/// The `users` row in Supabase. Created on first sign-in along with the starter folders.
+protocol UserProfileServicing: AnyObject {
+    func ensureUser(_ account: UserAccount) async throws
+}
+
 protocol PreferencesServicing: AnyObject {
     /// Nil until the user has finished onboarding.
     func load() async -> UserPreferences?
@@ -36,19 +41,19 @@ protocol SavedPlacesServicing: AnyObject {
 protocol LocationServicing: AnyObject {
     func requestAuthorization() async -> Bool
     func currentLocation() async throws -> GeoPoint
-    /// Continuous updates for turn-by-turn. Ends when the consumer stops iterating.
-    func updates() -> AsyncStream<GeoPoint>
+    /// Continuous fixes for turn-by-turn, also while the phone is locked. Ends when the consumer stops iterating.
+    func updates() -> AsyncStream<LocationFix>
     /// Compass heading in degrees, used to say "on your left" while walking.
     func headings() -> AsyncStream<Double>
 }
 
-/// Geocoding against the Georgia OSM extract (self-hosted Photon via an Edge Function).
+/// Geocoding against the Georgia OSM extract (self-hosted Nominatim via the `geocode` Edge Function).
 protocol GeocodingServicing: AnyObject {
     /// Closest matches first. Throws `AppError.outsideGeorgia` or `.noResults`.
     func search(_ query: String, near location: GeoPoint, limit: Int) async throws -> [Place]
 }
 
-/// Accessible pedestrian routing (self-hosted Valhalla via an Edge Function).
+/// Accessible pedestrian routing (self-hosted Valhalla via the `route` Edge Function).
 protocol RoutingServicing: AnyObject {
     func route(from origin: GeoPoint, to destination: Place, preferences: RoutingPreferences) async throws -> Route
 }
@@ -68,11 +73,15 @@ protocol SpeechServicing: AnyObject {
 }
 
 /// Voice input for destination search. Runs on-device so it works without a connection.
+/// The microphone is only on between `transcribe()` and `stop()`/`cancel()`, or until a pause.
 protocol SpeechRecognitionServicing: AnyObject {
     func requestAuthorization() async -> Bool
-    /// Partial transcripts as the user talks. Finishes when they stop speaking.
+    /// Partial transcripts as the user talks. Finishes when they pause or `stop()` is called.
     func transcribe() -> AsyncThrowingStream<String, Error>
+    /// Turns the microphone off now; the stream finishes with what was heard.
     func stop()
+    /// Turns the microphone off and ends the stream; the result is discarded.
+    func cancel()
 }
 
 protocol HapticsServicing: AnyObject {

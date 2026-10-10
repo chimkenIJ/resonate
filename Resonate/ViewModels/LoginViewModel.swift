@@ -24,6 +24,8 @@ final class LoginViewModel {
         do {
             let user = try await auth.signIn()
             await onAuthenticated(.signedIn(user))
+        } catch is CancellationError {
+            // The user closed the login sheet; nothing to say.
         } catch {
             let message = "Sign in didn't finish. Try again, or continue without an account."
             errorMessage = message
