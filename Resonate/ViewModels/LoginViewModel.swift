@@ -8,9 +8,9 @@ final class LoginViewModel {
 
     private let auth: any AuthServicing
     private let feedback: FeedbackCenter
-    private let onAuthenticated: (AuthState) async -> Void
+    private let onAuthenticated: @MainActor (AuthState) async -> Void
 
-    init(auth: any AuthServicing, feedback: FeedbackCenter, onAuthenticated: @escaping (AuthState) async -> Void) {
+    init(auth: any AuthServicing, feedback: FeedbackCenter, onAuthenticated: @escaping @MainActor (AuthState) async -> Void) {
         self.auth = auth
         self.feedback = feedback
         self.onAuthenticated = onAuthenticated
