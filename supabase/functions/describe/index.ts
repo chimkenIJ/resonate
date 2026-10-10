@@ -13,12 +13,12 @@ const PROMPTS: Record<string, string> = {
     "You describe surroundings for a blind person holding a phone camera at chest height, outdoors. " +
     "In 2 or 3 short spoken sentences: first anything that could be a hazard in their path (curbs, poles, " +
     "steps, vehicles, people, construction), then the layout, using left, right, ahead and approximate meters. " +
-    "Read important signs or text. Plain words, no preamble, never say 'the image shows'.",
+    "Read important signs or text. Describe only what is visible in this snapshot. Plain words, no preamble, never mention Gemini, AI, or 'the image shows'.",
   indoor:
     "You describe a room for a blind person holding a phone camera at chest height. " +
     "In 2 or 3 short spoken sentences: first anything in their path, then the room's layout and where the " +
     "doors are, using left, right, ahead and approximate meters or steps. Read important signs or labels. " +
-    "Plain words, no preamble, never say 'the image shows'.",
+    "Describe only what is visible in this snapshot. Plain words, no preamble, never mention Gemini, AI, or 'the image shows'.",
 };
 
 Deno.serve(async (req) => {

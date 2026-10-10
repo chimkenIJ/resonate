@@ -51,6 +51,35 @@ struct PersonalizeView: View {
 
                 channelPicker
 
+                Text("Maps settings")
+                    .appFont(.sectionTitle)
+                    .accessibilityAddTraits(.isHeader)
+                Toggle("Avoid stairs", isOn: $model.routing.avoidSteps)
+                Toggle("Prefer tactile paving", isOn: $model.routing.preferTactilePaving)
+                Toggle("Prefer audible crossings", isOn: $model.routing.preferAudioSignals)
+                Picker("Maximum incline", selection: $model.routing.maxIncline) {
+                    Text("Gentle (4%)").tag(0.04)
+                    Text("Moderate (8%)").tag(0.08)
+                    Text("Steep (15%)").tag(0.15)
+                }
+                Text("Preferences depend on available map data. Check route warnings before walking.")
+                    .appFont(.footnote)
+                    .foregroundStyle(Palette.textSecondary)
+
+                Text("Voice")
+                    .appFont(.sectionTitle)
+                    .accessibilityAddTraits(.isHeader)
+                Picker("Speaking voice", selection: $model.voiceID) {
+                    Text("Default voice").tag(String?.none)
+                    ForEach(model.voices) { voice in
+                        Text(voice.name).tag(Optional(voice.id))
+                    }
+                }
+                if model.voices.isEmpty {
+                    Text("Connect to load available voices.").appFont(.footnote)
+                }
+
+
                 if let message = model.message {
                     Text(message)
                         .appFont(.body)
@@ -77,6 +106,7 @@ struct PersonalizeView: View {
         }
         .background(Palette.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .task { await model.loadVoices(using: app.services.speech) }
     }
 
     @ViewBuilder

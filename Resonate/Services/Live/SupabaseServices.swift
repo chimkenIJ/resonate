@@ -98,6 +98,7 @@ private nonisolated struct PreferencesRow: Codable, Sendable {
     var userID: String?
     var needs: [String]
     var alertChannels: [String]
+    var voiceID: String?
     var avoidSteps: Bool
     var maxIncline: Double
     var preferTactilePaving: Bool
@@ -105,6 +106,7 @@ private nonisolated struct PreferencesRow: Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case needs
+        case voiceID = "voice_id"
         case userID = "user_id"
         case alertChannels = "alert_channels"
         case avoidSteps = "avoid_steps"
@@ -115,6 +117,8 @@ private nonisolated struct PreferencesRow: Codable, Sendable {
 
     init(_ preferences: UserPreferences, userID: String) {
         self.userID = userID
+        // Encode an empty value so upsert clears the old voice instead of omitting the column.
+        voiceID = preferences.voiceID ?? ""
         needs = preferences.needs.map(\.rawValue).sorted()
         alertChannels = preferences.alertChannels.map(\.rawValue).sorted()
         avoidSteps = preferences.routing.avoidSteps
@@ -125,6 +129,7 @@ private nonisolated struct PreferencesRow: Codable, Sendable {
 
     var model: UserPreferences {
         var preferences = UserPreferences()
+        preferences.voiceID = voiceID?.isEmpty == false ? voiceID : nil
         let needs = Set(needs.compactMap(AssistNeed.init(rawValue:)))
         let channels = Set(alertChannels.compactMap(AlertChannel.init(rawValue:)))
         if !needs.isEmpty { preferences.needs = needs }

@@ -162,3 +162,10 @@ a message and falls back to mock services.
 | Requests fail with 401 after that is fixed | The token has no `role` claim: the Action (1c) isn't deployed or attached to the Login flow |
 | Requests succeed but return no rows | The token's `sub` doesn't match `user_id`, or `ensure_user()` never ran |
 | Signed out on every launch | **Allow Offline Access** is off on the API (1b), so there's no refresh token |
+
+### Voice choices and snapshot narration
+
+Apply `20261010000001_voice_preferences.sql` and redeploy the `speak` and
+`describe` Edge Functions for the onboarding voice picker and snapshot wording.
+The voice picker loads the voices available to the configured ElevenLabs API key;
+no voice IDs or API keys need to be bundled into the iOS app.

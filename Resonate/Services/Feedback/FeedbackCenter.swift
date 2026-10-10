@@ -8,7 +8,7 @@ final class FeedbackCenter {
     private let haptics: any HapticsServicing
     private let tones: any TonesServicing
 
-    var preferences: UserPreferences
+    var preferences: UserPreferences { didSet { speech.selectVoice(preferences.voiceID) } }
     private(set) var currentAlert: ObstacleAlert?
 
     private var lastAlertKey: String?
@@ -57,6 +57,8 @@ final class FeedbackCenter {
         UserDefaults.standard.set(true, forKey: defaultsKey)
         await speech.speak(text, priority: .info)
     }
+
+    func stopSpeech() { speech.stop() }
 
     func repeatLast() async {
         await speech.repeatLast()

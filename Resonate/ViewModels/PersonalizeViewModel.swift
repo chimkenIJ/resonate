@@ -13,11 +13,21 @@ final class PersonalizeViewModel {
     private(set) var message: String?
     private(set) var isSaving = false
 
-    private var base: UserPreferences
-    private let save: (UserPreferences) async throws -> Void
+    var routing: RoutingPreferences { didSet { autosave() } }
+    var voiceID: String? { didSet { autosave() } }
+    private(set) var voices: [SpeechVoice] = []
 
-    init(mode: Mode, preferences: UserPreferences, save: @escaping (UserPreferences) async throws -> Void) {
+    func loadVoices(using speech: any SpeechServicing) async {
+        voices = (try? await speech.availableVoices()) ?? []
+    }
+
+    private var base: UserPreferences
+    private let save: @MainActor (UserPreferences) async throws -> Void
+
+    init(mode: Mode, preferences: UserPreferences, save: @escaping @MainActor (UserPreferences) async throws -> Void) {
         self.mode = mode
+        self.routing = preferences.routing
+        self.voiceID = preferences.voiceID
         self.base = preferences
         self.needs = preferences.needs
         self.channels = preferences.alertChannels
@@ -57,6 +67,8 @@ final class PersonalizeViewModel {
         isSaving = true
         defer { isSaving = false }
         var updated = base
+        updated.routing = routing
+        updated.voiceID = voiceID
         updated.needs = needs
         updated.alertChannels = channels
         do {

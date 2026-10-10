@@ -17,15 +17,17 @@ struct RootView: View {
                 LoginView(model: LoginViewModel(auth: app.services.auth, feedback: app.feedback) { state in
                     await app.didAuthenticate(state)
                 })
-            case .onboarding:
-                PersonalizeView(model: PersonalizeViewModel(mode: .onboarding, preferences: app.preferences) { preferences in
-                    try await app.updatePreferences(preferences)
-                })
-            case .ready:
+            case .onboarding, .ready:
                 MainTabView(searchModel: DestinationSearchViewModel(services: app.services, feedback: app.feedback))
             }
         }
         .background(Palette.background.ignoresSafeArea())
+        .fullScreenCover(isPresented: Binding(get: { app.phase == .onboarding }, set: { _ in })) {
+            PersonalizeView(model: PersonalizeViewModel(mode: .onboarding, preferences: app.preferences) { preferences in
+                try await app.updatePreferences(preferences)
+            })
+            .interactiveDismissDisabled()
+        }
         .task { await app.bootstrap() }
     }
 }

@@ -1,21 +1,29 @@
 import MapKit
 import SwiftUI
 
-/// Dark map with the step-free route in slate and avoided hazards marked.
+/// Dark map with the walking route in slate and avoided hazards marked.
 /// MapKit is only used for display; the route itself comes from Valhalla.
 /// Hidden from VoiceOver: the route sheet speaks the same information.
 struct RouteMapView: View {
     let route: Route
+    var currentLocation: GeoPoint? = nil
+    @State private var position: MapCameraPosition = .automatic
 
     private var start: CLLocationCoordinate2D {
         (route.polyline.first ?? route.destination.coordinate).coordinate
     }
 
     var body: some View {
-        Map(initialPosition: .region(region)) {
+        Map(position: $position) {
             MapPolyline(coordinates: route.polyline.map(\.coordinate))
                 .stroke(Accent.slate.color, style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
 
+            if let currentLocation {
+                Annotation("Your location", coordinate: currentLocation.coordinate) {
+                    Circle().fill(.blue).frame(width: 18, height: 18)
+                        .overlay(Circle().stroke(.white, lineWidth: 3))
+                }
+            }
             Annotation("Start", coordinate: start, anchor: .center) {
                 Circle()
                     .fill(Palette.textPrimary)
@@ -52,9 +60,21 @@ struct RouteMapView: View {
                 .annotationTitles(.hidden)
             }
         }
+        .onAppear { updateCamera() }
+        .onChange(of: currentLocation) { updateCamera() }
+        .onChange(of: route.id) { updateCamera() }
         .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll, showsTraffic: false))
         .mapControls {}
         .accessibilityHidden(true)
+    }
+
+    private func updateCamera() {
+        if let currentLocation {
+            position = .region(MKCoordinateRegion(center: currentLocation.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.002, longitudeDelta: 0.002)))
+        } else {
+            position = .region(region)
+        }
     }
 
     /// Fits the whole route with some padding.

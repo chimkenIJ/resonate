@@ -4,7 +4,7 @@ import Foundation
 nonisolated struct RoutingPreferences: Codable, Hashable, Sendable {
     var avoidSteps = true
     /// Maximum grade as a fraction (0.08 = 8%).
-    var maxIncline = 0.08
+    var maxIncline: Double = 0.08
     var preferTactilePaving = true
     var preferAudioSignals = true
 }

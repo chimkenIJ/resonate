@@ -30,7 +30,8 @@ nonisolated final class SpeechClipStore: @unchecked Sendable {
 
 /// The app's voice, from ElevenLabs through the `speak` Edge Function.
 ///
-/// - Safety alerts interrupt anything; navigation interrupts info; otherwise phrases queue (briefly).
+/// - Requested snapshots interrupt speech and suppress other narration until finished.
+/// - Otherwise, safety interrupts navigation, navigation interrupts info, and phrases queue briefly.
 /// - Safety alerts are built from pre-recorded pieces, so they play with no network wait, even offline.
 /// - If the network is down and a phrase was never recorded, the phone's built-in voice says it
 ///   rather than leaving the user in silence.
@@ -42,7 +43,23 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
     }
 
     private let client: EdgeFunctionClient
-    private let store = SpeechClipStore()
+    private var store = SpeechClipStore()
+    private var voiceID: String?
+
+    func selectVoice(_ id: String?) {
+        guard voiceID != id else { return }
+        stop()
+        voiceID = id
+        store = SpeechClipStore(voiceVersion: id ?? "matilda-v1")
+        Task { await prewarm(SpeechPhrases.safety) }
+    }
+
+    func availableVoices() async throws -> [SpeechVoice] {
+        nonisolated struct Body: Encodable, Sendable { let action = "voices" }
+        nonisolated struct Response: Decodable, Sendable { let voices: [SpeechVoice] }
+        return try await client.post("speak", body: Body(), as: Response.self).voices
+    }
+
     private let deviceVoice = AVSpeechSynthesizer()
     private var player: AVAudioPlayer?
     private var finished: CheckedContinuation<Void, Never>?
@@ -70,17 +87,18 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
     func speak(_ text: String, priority: SpeechPriority, fragments: [String]?) async {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        if current?.priority == .snapshot && priority != .snapshot { return }
         lastSpoken = text
         let utterance = Utterance(text: text, priority: priority, fragments: fragments)
 
-        if let current, !(priority > current.priority || (priority == .safety && current.priority == .safety)) {
+        if let current, !(priority > current.priority || (priority == .safety && current.priority == .safety) || priority == .snapshot) {
             pending.append(utterance)
             if pending.count > maxPending { pending.removeFirst() }
             return
         }
         // More urgent (or a newer safety alert): cut in now, and drop anything less urgent that was waiting.
         if current != nil { interrupt() }
-        pending.removeAll { $0.priority < priority }
+        pending.removeAll { priority == .snapshot || $0.priority < priority }
         pending.insert(utterance, at: 0)
         startWorker()
     }
@@ -88,6 +106,7 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
     func stop() {
         pending.removeAll()
         interrupt()
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     func repeatLast() async {
@@ -96,6 +115,8 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
     }
 
     func prewarm(_ phrases: [String]) async {
+        let store = self.store
+        let voiceID = self.voiceID
         let missing = phrases.filter { !store.contains($0) }
         guard !missing.isEmpty else { return }
         Log.speech.notice("Recording \(missing.count) safety phrases in the app voice")
@@ -106,13 +127,13 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
             await withTaskGroup(of: Void.self) { group in
                 for phrase in batch {
                     group.addTask { [self] in
-                        if let data = try? await self.fetch(phrase, timeout: 15) { self.store.store(data, for: phrase) }
+                        if let data = try? await self.fetch(phrase, timeout: 15, voiceID: voiceID) { store.store(data, for: phrase) }
                     }
                 }
             }
             index += 3
         }
-        Log.speech.notice("Safety phrases ready: \(phrases.filter(self.store.contains).count)/\(phrases.count)")
+        Log.speech.notice("Safety phrases ready: \(phrases.filter(store.contains).count)/\(phrases.count)")
     }
 
     // MARK: Playback queue
@@ -144,6 +165,8 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
         if deviceVoice.isSpeaking { deviceVoice.stopSpeaking(at: .immediate) }
         resumeFinished()
         current = nil
+        isSpeaking = false
+        workerID = UUID()
     }
 
     private func play(_ utterance: Utterance) async {
@@ -160,7 +183,7 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
         }
         do {
             // Safety can't wait long: if the voice service is slow, fall back right away.
-            let data = try await fetch(utterance.text, timeout: utterance.priority == .safety ? 2 : 8)
+            let data = try await fetch(utterance.text, timeout: utterance.priority == .safety ? 2 : 8, voiceID: voiceID)
             if Task.isCancelled { return }
             if utterance.text.count <= cacheLimit { store.store(data, for: utterance.text) }
             await playClips([data])
@@ -197,9 +220,9 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
         }
     }
 
-    private func fetch(_ text: String, timeout: TimeInterval) async throws -> Data {
-        nonisolated struct Body: Encodable, Sendable { let text: String }
-        return try await client.postForData("speak", body: Body(text: text), timeout: timeout)
+    private func fetch(_ text: String, timeout: TimeInterval, voiceID: String?) async throws -> Data {
+        nonisolated struct Body: Encodable, Sendable { let text: String; let voiceID: String? }
+        return try await client.postForData("speak", body: Body(text: text, voiceID: voiceID), timeout: timeout)
     }
 
     private func activateAudioSession() {

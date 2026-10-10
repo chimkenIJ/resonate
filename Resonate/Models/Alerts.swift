@@ -119,7 +119,7 @@ nonisolated enum ToneCue: String, Codable, Hashable, Sendable {
 
 /// Speech queue priority. Safety interrupts everything else.
 nonisolated enum SpeechPriority: Int, Comparable, Sendable {
-    case info, navigation, safety
+    case info, navigation, safety, snapshot
 
     static func < (lhs: SpeechPriority, rhs: SpeechPriority) -> Bool { lhs.rawValue < rhs.rawValue }
 }
