@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live Obstacle Detection</title>
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#F2F0EB}a:hover{color:#FFFFFF}
+</style>
+</head>
+<body>
+
+
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #121314; color: #F2F0EB; font-family: 'Atkinson Hyperlegible Next', system-ui, sans-serif">
+
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 390px; height: 360px; background: #23262B"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 230px; width: 70px; height: 300px; background: #2E3137"></div>
+  <div aria-hidden="true" style="position: absolute; right: 0; top: 190px; width: 90px; height: 340px; background: #2E3137"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 360px; width: 390px; height: 484px; background: #393C42; clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%)"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 360px; width: 390px; height: 484px; background: #44474D; clip-path: polygon(46% 0, 54% 0, 64% 100%, 36% 100%)"></div>
+
+  <div style="position: absolute; left: 66px; top: 290px; width: 124px; height: 150px; border: 4px solid #C9785D; border-radius: 18px; box-sizing: border-box"></div>
+  <span style="position: absolute; left: 66px; top: 252px; background: #C9785D; color: #121314; font-weight: 800; font-size: 15px; padding: 7px 12px; border-radius: 12px">Bike · 2 m</span>
+
+  <div style="position: absolute; left: 236px; top: 320px; width: 76px; height: 100px; border: 4px solid #A99AC9; border-radius: 18px; box-sizing: border-box"></div>
+  <span style="position: absolute; left: 236px; top: 282px; background: #A99AC9; color: #121314; font-weight: 800; font-size: 15px; padding: 7px 12px; border-radius: 12px">Sign · 6 m</span>
+
+  <div style="position: absolute; left: 30px; top: 540px; width: 330px; height: 36px; border: 4px dashed #D9B26A; border-radius: 12px; box-sizing: border-box"></div>
+  <span style="position: absolute; left: 30px; top: 502px; background: #D9B26A; color: #121314; font-weight: 800; font-size: 15px; padding: 7px 12px; border-radius: 12px">Curb drop · 4 m</span>
+
+  <div style="position: absolute; left: 0; top: 0; width: 390px; padding: 58px 20px 0; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between">
+    <a href="Main.html" aria-label="Back to home" style="width: 52px; height: 52px; border-radius: 26px; background: #1C1D1F; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    </a>
+    <span style="display: flex; align-items: center; gap: 8px; background: #1C1D1F; border-radius: 999px; padding: 13px 18px; font-size: 15px; font-weight: 800">
+      <span style="width: 10px; height: 10px; border-radius: 5px; background: #C9785D"></span>Watching ahead
+    </span>
+    <button type="button" aria-label="Describe the whole scene" style="width: 52px; height: 52px; border-radius: 26px; border: 0; background: #1C1D1F; color: #F2F0EB; display: flex; align-items: center; justify-content: center; cursor: pointer">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+    </button>
+  </div>
+
+  <div style="position: absolute; left: 10px; right: 10px; bottom: 10px; background: #1C1D1F; border: 1px solid #333538; border-radius: 34px; padding: 22px 20px 18px; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <span style="background: #C9785D; color: #121314; font-weight: 800; font-size: 14px; padding: 6px 12px; border-radius: 10px">Heads up</span>
+      <span style="font-size: 15px; font-weight: 600; color: #B4B1AA">Spoken + 2 buzzes</span>
+    </div>
+    <span style="font-size: 30px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em">Bike parked ahead, slightly left.</span>
+    <div style="display: flex; align-items: center; gap: 14px; background: #2A2C30; border-radius: 22px; padding: 12px 14px">
+      <span style="width: 44px; height: 44px; border-radius: 22px; background: #D9B26A; color: #121314; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17V9a4 4 0 0 1 4-4h8"></path><polyline points="15 1 19 5 15 9"></polyline></svg>
+      </span>
+      <span style="font-size: 17px; font-weight: 600; line-height: 1.3">Step right to pass. Curb drop in 4 m.</span>
+    </div>
+    <div style="display: flex; gap: 10px">
+      <button type="button" style="flex: 1 1 0; height: 60px; border-radius: 30px; border: 0; background: #2A2C30; color: #F2F0EB; font-family: inherit; font-size: 17px; font-weight: 700; cursor: pointer">Repeat</button>
+      <button type="button" aria-label="Video call a helper" style="width: 60px; height: 60px; border-radius: 30px; border: 0; background: #8FAE8B; color: #121314; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+      </button>
+      <a href="Route.html" style="flex: 1 1 0; height: 60px; border-radius: 30px; background: #F2F0EB; color: #121314; font-size: 17px; font-weight: 800; display: flex; align-items: center; justify-content: center; text-decoration: none">Route</a>
+    </div>
+  </div>
+</div>
+
+
+</body>
+</html>

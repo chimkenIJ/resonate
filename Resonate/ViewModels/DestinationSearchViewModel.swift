@@ -1,0 +1,112 @@
+import Foundation
+import Observation
+
+/// Voice or text search for a destination. Shows and reads aloud the closest 3–5 results.
+@Observable
+final class DestinationSearchViewModel {
+    enum Phase: Equatable {
+        case idle, listening, searching, results
+        case failed(String)
+    }
+
+    var query = ""
+    private(set) var results: [Place] = []
+    private(set) var phase: Phase = .idle
+
+    let resultLimit = 5
+
+    private let recognizer: any SpeechRecognitionServicing
+    private let geocoding: any GeocodingServicing
+    private let location: any LocationServicing
+    private let feedback: FeedbackCenter
+    private var listenTask: Task<Void, Never>?
+    private var handledListenRequest = 0
+
+    init(services: AppServices, feedback: FeedbackCenter) {
+        self.recognizer = services.speechRecognition
+        self.geocoding = services.geocoding
+        self.location = services.location
+        self.feedback = feedback
+    }
+
+    var isListening: Bool { phase == .listening }
+
+    /// Home's "Where do you want to go?" sends a request; each one is handled once.
+    func handleListenRequest(_ request: Int) {
+        guard request != handledListenRequest else { return }
+        handledListenRequest = request
+        startListening()
+    }
+
+    func toggleListening() {
+        isListening ? stopListening() : startListening()
+    }
+
+    func startListening() {
+        listenTask?.cancel()
+        listenTask = Task { await listen() }
+    }
+
+    func stopListening() {
+        recognizer.stop()
+        listenTask?.cancel()
+        if phase == .listening { phase = .idle }
+    }
+
+    func search() async {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        phase = .searching
+        do {
+            let here = try await location.currentLocation()
+            guard GeorgiaRegion.contains(here) else { throw AppError.outsideGeorgia }
+            results = try await geocoding.search(text, near: here, limit: resultLimit)
+            phase = .results
+            await feedback.announce(spokenResults, priority: .info)
+        } catch {
+            results = []
+            await fail((error as? AppError) ?? .server(message: "Search isn't working right now. Try again in a moment."))
+        }
+    }
+
+    private func listen() async {
+        guard await recognizer.requestAuthorization() else {
+            await fail(.permissionDenied(.speechRecognition))
+            return
+        }
+        query = ""
+        results = []
+        phase = .listening
+        do {
+            for try await partial in recognizer.transcribe() {
+                if Task.isCancelled { return }
+                query = partial
+            }
+        } catch {
+            await fail(.server(message: "I didn't catch that. Tap the microphone and try again."))
+            return
+        }
+        guard !Task.isCancelled else { return }
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            phase = .idle
+            await feedback.announce("I didn't hear a place. Tap the microphone to try again.", priority: .info)
+        } else {
+            await search()
+        }
+    }
+
+    private func fail(_ error: AppError) async {
+        phase = .failed(error.spokenMessage)
+        await feedback.announce(error.spokenMessage, priority: .info)
+    }
+
+    /// "Found 3 places, closest first. 1: Kroger, 1.4 kilometers away. ..."
+    var spokenResults: String {
+        let intro = results.count == 1 ? "Found 1 place." : "Found \(results.count) places, closest first."
+        let items = results.enumerated().map { index, place in
+            let distance = place.distanceMeters.map { ", \(DistanceText.spoken($0)) away" } ?? ""
+            return "\(index + 1): \(place.name)\(distance)."
+        }
+        return ([intro] + items).joined(separator: " ")
+    }
+}
