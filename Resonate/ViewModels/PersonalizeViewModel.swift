@@ -35,7 +35,7 @@ final class PersonalizeViewModel {
 
     /// Plays a short sample in the chosen voice right away.
     func preview(name: String, voiceID: String?, using speech: any SpeechServicing) async {
-        await speech.preview("Hi, I'm \(name). Bike ahead, slightly left, 2 meters. Step right to pass.",
+        await speech.preview("Hi, I'm \(name).",
                              voiceID: voiceID ?? Self.defaultVoiceID)
     }
 

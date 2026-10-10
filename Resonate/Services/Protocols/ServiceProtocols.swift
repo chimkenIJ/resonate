@@ -85,12 +85,14 @@ protocol SpeechServicing: AnyObject {
     func repeatLast() async
     /// Records phrases ahead of time (safety alerts), so they're ready offline.
     func prewarm(_ phrases: [String]) async
+    /// Plays `text` in a specific voice right away (voice picker samples). Doesn't change the app's voice.
+    /// Declared here (not only in the extension) so calls through `any SpeechServicing` reach the real service.
+    func preview(_ text: String, voiceID: String?) async
 }
 
 extension SpeechServicing {
     func availableVoices() async throws -> [SpeechVoice] { [] }
     func selectVoice(_ id: String?) {}
-    /// Plays `text` in a specific voice right away (voice picker samples). Doesn't change the app's voice.
     func preview(_ text: String, voiceID: String?) async {}
 
     func speak(_ text: String, priority: SpeechPriority) async {
