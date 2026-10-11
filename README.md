@@ -6,6 +6,17 @@ The app brings outdoor navigation and indoor room scanning into one interface, w
 
 Resonate is a prototype intended to supplement a cane or guide dog. Detection and map information can be incomplete, and distance estimates are approximate. See [Limits](#limits) before trying the app.
 
+## Features
+
+- **Explore surroundings:** detect supported objects and provide distance estimates with speech, vibration, and audio cues.
+- **Find a destination:** search places and follow walking routes informed by available accessibility tags.
+- **Scan a room:** use RoomPlan on a supported LiDAR iPhone.
+- **Describe a scene:** request a camera-based description through Gemini.
+- **Recognize colors:** name colors sampled from the center of the camera view.
+- **Save places:** organize destinations in folders and choose feedback preferences.
+
+These features use simulated services in demo mode. Live services require the configuration below.
+
 ## App flow
 
 Sign in or continue as a guest → onboarding and preferences → home.
