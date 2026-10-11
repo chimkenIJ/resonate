@@ -34,6 +34,9 @@ struct SaveToFolderView: View {
         .background(Palette.background.ignoresSafeArea())
         .presentationBackground(Palette.background)
         .task { await model.load() }
+        .onAppear { model.stopSpeech() }
+        .onDisappear { model.stopSpeech() }
+        .onChange(of: isAddingFolder) { _, _ in model.stopSpeech() }
         .sheet(isPresented: $isAddingFolder) {
             AddFolderView(model: AddFolderViewModel(service: model.service)) { folder in
                 if await model.save(to: folder) { dismiss() }

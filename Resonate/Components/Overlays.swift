@@ -156,7 +156,7 @@ struct MiniMapView: View {
             }
             Text("Bike parked ahead, slightly left.").appFont(.alertHeadline).foregroundStyle(Palette.textPrimary)
             HStack(spacing: 16) {
-                MiniMapView(items: SampleData.indoorSnapshots[0].miniMap)
+                MiniMapView(items: IndoorComposer.compose(SampleData.indoorSnapshots[0].elements, pose: SampleData.indoorSnapshots[0].pose).miniMap)
                 GuidanceRow(text: "Step right to pass.", systemImage: "arrow.turn.up.right")
             }
         }

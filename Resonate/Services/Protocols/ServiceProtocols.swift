@@ -81,6 +81,8 @@ protocol SpeechServicing: AnyObject {
     /// on the phone they play immediately, without the network.
     /// Returns once the phrase is queued, not when it finishes, so callers never block on audio.
     func speak(_ text: String, priority: SpeechPriority, fragments: [String]?) async
+    /// Waits for queued and playing speech to finish, or to be stopped.
+    func waitUntilFinished() async
     func stop()
     func repeatLast() async
     /// Records phrases ahead of time (safety alerts), so they're ready offline.

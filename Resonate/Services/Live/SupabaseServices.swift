@@ -248,19 +248,24 @@ final class SupabasePreferencesService: PreferencesServicing {
         self.auth = auth
     }
 
+    /// Every column the app saves, so nothing (like the voice) is lost when the phone reloads from here.
+    private static let columns = "needs, alert_channels, voice_id, avoid_steps, max_incline, prefer_tactile_paving, prefer_audio_signals"
+
     func load() async -> UserPreferences? {
         do {
-            let rows: [PreferencesRow] = try await client
-                .from("preferences")
-                .select("needs, alert_channels, avoid_steps, max_incline, prefer_tactile_paving, prefer_audio_signals")
-                .limit(1)
-                .execute()
-                .value
-            return rows.first?.model
+            return try await select(Self.columns)
+        } catch where String(describing: error).contains("voice_id") {
+            // The database hasn't had the voice migration yet: load everything else.
+            return try? await select(Self.columns.replacingOccurrences(of: "voice_id, ", with: ""))
         } catch {
             Log.data.error("Couldn't load preferences: \(String(describing: error), privacy: .public)")
             return nil
         }
+    }
+
+    private func select(_ columns: String) async throws -> UserPreferences? {
+        let rows: [PreferencesRow] = try await client.from("preferences").select(columns).limit(1).execute().value
+        return rows.first?.model
     }
 
     func save(_ preferences: UserPreferences) async throws {

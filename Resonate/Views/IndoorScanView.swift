@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Indoor scanning ("Indoors" mockup): walls, doors, and furniture with distances.
+/// Getting around indoors ("Indoors" mockup): what's in the way, where the doors are, and guidance to a door.
 struct IndoorScanView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model: IndoorScanViewModel
@@ -18,14 +18,14 @@ struct IndoorScanView: View {
             } else {
                 CameraBackdrop(scene: .room)
             }
-            DetectionOverlay(objects: model.snapshot?.objects ?? [], imageSize: model.snapshot?.imageSize)
+            DetectionOverlay(objects: model.overlayObjects, imageSize: model.snapshot?.imageSize)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 HStack {
                     BackButton(accessibilityLabel: "Back to home", style: .floating)
                     Spacer()
-                    StatusPill(text: model.isSupported ? "Scanning room" : "Not available", accent: .sage)
+                    StatusPill(text: !model.isSupported ? "Not available" : (model.isGuiding ? "Guiding to door" : "Indoors"), accent: .sage)
                 }
                 .padding(.horizontal, Metrics.screenPadding)
                 .padding(.top, 8)
@@ -55,7 +55,7 @@ struct IndoorScanView: View {
     private var sheet: some View {
         SheetCard(spacing: 16) {
             AdaptiveStack(spacing: 16) {
-                MiniMapView(items: model.snapshot?.miniMap ?? [])
+                MiniMapView(items: model.miniMap)
                 Text(model.headline)
                     .appFont(.indoorHeadline)
                     .foregroundStyle(Palette.textPrimary)
@@ -77,11 +77,18 @@ struct IndoorScanView: View {
                     .foregroundStyle(Palette.textMuted)
             }
 
+            // The main job indoors: getting to a door. Always here.
+            PillButton(title: model.isGuiding ? "Stop guiding" : "Find door",
+                       accessibilityHint: model.isGuiding ? "Stops guiding to the door"
+                           : "Guides you to the nearest door, step by step, and says how to open it") {
+                Task { await model.toggleFindDoor() }
+            }
+
             HStack(spacing: 10) {
-                PillButton(title: "Repeat", kind: .secondary, accessibilityHint: "Says what's around you again") {
+                PillButton(title: "Repeat", kind: .secondary, accessibilityHint: "Says the last update again") {
                     Task { await model.repeatLast() }
                 }
-                PillButton(title: model.isDescribing ? "Looking…" : "Describe room") {
+                PillButton(title: model.isDescribing ? "Looking…" : "Describe room", kind: .secondary) {
                     Task { await model.describeRoom() }
                 }
                 .disabled(model.isDescribing)

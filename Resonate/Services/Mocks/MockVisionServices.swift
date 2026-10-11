@@ -47,9 +47,11 @@ final class MockSceneDescriptionService: SceneDescriptionServicing {
         try await Task.sleep(for: .seconds(1))
         switch setting {
         case .indoor:
-            return "A classroom about 8 meters long. Rows of desks fill the middle. The door is straight ahead, and there's a whiteboard on the right wall."
+            return "A classroom about 25 feet long. Rows of desks fill the middle. The door is straight ahead, and there's a whiteboard on the right wall."
+        case .door:
+            return "The door is about 3 steps ahead, slightly right. It's closed. Pull the handle on the right side."
         case .outdoor:
-            return "A wide sidewalk with trees on the left. A bike is parked about 2 meters ahead. There's a crosswalk with a signal at the corner."
+            return "A wide sidewalk with trees on the left. A bike is parked about 6 feet ahead. There's a crosswalk with a signal at the corner."
         }
     }
 }

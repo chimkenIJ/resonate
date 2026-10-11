@@ -95,21 +95,25 @@ nonisolated enum SampleData {
         DetectionFrame(objects: [], depthSource: .lidar),
     ]
 
-    static let indoorSnapshots: [IndoorSnapshot] = [
-        IndoorSnapshot(
-            objects: [
-                DetectedObject(label: "Wall", category: .wall, confidence: 0.99, boundingBox: CGRect(x: 0.02, y: 0.13, width: 0.31, height: 0.45), distanceMeters: 1),
-                DetectedObject(label: "Door", category: .door, confidence: 0.93, boundingBox: CGRect(x: 0.42, y: 0.22, width: 0.16, height: 0.17), distanceMeters: 6),
-                DetectedObject(label: "Chair", category: .furniture, confidence: 0.88, boundingBox: CGRect(x: 0.62, y: 0.44, width: 0.23, height: 0.11), distanceMeters: 2),
-            ],
-            headline: "Chair 2 steps ahead, on your right.",
-            guidance: "Walk straight. Wall stays on your left. Door is open ahead.",
-            guidanceIcon: .straight,
-            miniMap: [
-                MiniMapItem(category: .wall, rect: CGRect(x: 0.10, y: 0.10, width: 0.08, height: 0.80)),
-                MiniMapItem(category: .door, rect: CGRect(x: 0.42, y: 0.08, width: 0.19, height: 0.06)),
-                MiniMapItem(category: .furniture, rect: CGRect(x: 0.60, y: 0.46, width: 0.17, height: 0.17)),
-            ]
-        ),
-    ]
+    /// A room seen from the user standing at the origin, facing world −Z ("ahead").
+    static let indoorSnapshots: [IndoorSnapshot] = {
+        let wallID = UUID(), doorID = UUID(), chairID = UUID()
+        func at(_ ahead: Double, _ right: Double) -> SIMD2<Double> { SIMD2(right, -ahead) }
+        return [
+            IndoorSnapshot(
+                elements: [
+                    RoomElement(kind: .wall, label: "Wall", category: .wall, footprint: [at(-1, -0.9), at(6, -0.9)], height: 2.4, id: wallID),
+                    RoomElement(kind: .door(isOpen: true), label: "Door", category: .door, footprint: [at(4, -0.2), at(4, 0.7)], height: 2, id: doorID),
+                    RoomElement(kind: .object, label: "Chair", category: .furniture,
+                                footprint: [at(1.2, 0.4), at(1.2, 0.9), at(1.7, 0.9), at(1.7, 0.4)], height: 0.9, id: chairID),
+                ],
+                pose: FloorPose(position: .zero, forward: SIMD2(0, -1)),
+                objects: [
+                    DetectedObject(id: wallID, label: "Wall", category: .wall, confidence: 0.99, boundingBox: CGRect(x: 0.02, y: 0.13, width: 0.31, height: 0.45), distanceMeters: 1),
+                    DetectedObject(id: doorID, label: "Door", category: .door, confidence: 0.93, boundingBox: CGRect(x: 0.42, y: 0.22, width: 0.16, height: 0.17), distanceMeters: 4),
+                    DetectedObject(id: chairID, label: "Chair", category: .furniture, confidence: 0.88, boundingBox: CGRect(x: 0.62, y: 0.44, width: 0.23, height: 0.11), distanceMeters: 1.4),
+                ]
+            ),
+        ]
+    }()
 }

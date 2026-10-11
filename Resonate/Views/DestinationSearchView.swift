@@ -46,6 +46,23 @@ struct DestinationSearchView: View {
 
                 status
 
+                if !model.isListening, model.phase != .searching {
+                    if !model.matchingRecentSearches.isEmpty, (model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isFieldFocused) {
+                        Text("Recent searches")
+                            .appFont(.sectionTitle)
+                            .foregroundStyle(Palette.textPrimary)
+                            .accessibilityAddTraits(.isHeader)
+                        ForEach(model.matchingRecentSearches, id: \.self) { text in
+                            PillButton(title: text, systemImage: "clock", kind: .secondary,
+                                       accessibilityLabel: "Search again for \(text)") {
+                                isFieldFocused = false
+                                model.query = text
+                                Task { await model.search() }
+                            }
+                        }
+                    }
+                }
+
                 ForEach(model.results) { place in
                     DestinationResultRow(place: place) {
                         app.router.push(.route(place))
@@ -61,6 +78,7 @@ struct DestinationSearchView: View {
         .scrollDismissesKeyboard(.interactively)
         // Never leave the microphone on behind another screen.
         .onDisappear { model.cancelListening() }
+        .onAppear { model.refreshHistory() }
         .background(Palette.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task(id: app.router.listenRequest) {
@@ -120,7 +138,7 @@ struct DestinationSearchView: View {
 #Preview {
     let app = AppModel.preview()
     NavigationStack {
-        DestinationSearchView(model: DestinationSearchViewModel(services: app.services, feedback: app.feedback))
+        DestinationSearchView(model: DestinationSearchViewModel(services: app.services))
     }
     .environment(app)
     .preferredColorScheme(.dark)

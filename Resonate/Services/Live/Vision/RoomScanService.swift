@@ -5,8 +5,9 @@ import RoomPlan
 import simd
 
 /// Indoor scanning with Apple RoomPlan (LiDAR): walls, doors (open or closed), doorways, furniture,
-/// and stairs, in real time. YOLO adds people and pets, which RoomPlan doesn't track.
-/// Everything runs on the phone.
+/// and stairs, in real time. YOLO adds people and pets, which RoomPlan doesn't track; they're
+/// measured with LiDAR depth, grouped (a person with a bag, people together), and tracked so each
+/// is recognized once. Everything runs on the phone.
 final class RoomScanService: IndoorScanServicing {
     static var isSupportedOnDevice: Bool { RoomCaptureSession.isSupported }
 
@@ -16,6 +17,10 @@ final class RoomScanService: IndoorScanServicing {
     private var elements: [RoomElement] = []
     private var coaching: String?
     private var loop: Task<Void, Never>?
+    private var tracker = ObstacleTracker()
+
+    /// YOLO classes that matter indoors (RoomPlan covers furniture).
+    private static let movingClasses: Set<String> = ["person", "dog", "cat", "suitcase", "backpack"]
 
     var isSupported: Bool { Self.isSupportedOnDevice }
     var previewSource: CameraPreviewSource { .ar(captureSession.arSession) }
@@ -35,6 +40,7 @@ final class RoomScanService: IndoorScanServicing {
                 return
             }
             elements = []
+            tracker = ObstacleTracker()
             var configuration = RoomCaptureSession.Configuration()
             configuration.isCoachingEnabled = true
             captureSession.run(configuration: configuration)
@@ -77,41 +83,53 @@ final class RoomScanService: IndoorScanServicing {
         forward /= length
         let pose = FloorPose(position: SIMD2(Double(position.x), Double(position.z)), forward: forward)
 
-        // People and pets from YOLO, off the main thread.
+        // People and pets from YOLO, measured with LiDAR depth, off the main thread.
         let resolution = camera.imageResolution
         let imageSize = CGSize(width: resolution.height, height: resolution.width)
-        nonisolated(unsafe) let pixelBuffer = frame.capturedImage
+        nonisolated(unsafe) let arFrame = frame
         let detector = detector
-        let focal = Double(camera.intrinsics[0][0])
-        let people = await Task.detached(priority: .userInitiated) {
-            FrameAnalysis.objects(from: detector.detect(in: pixelBuffer, orientation: .right).filter {
-                ["person", "dog", "cat", "suitcase", "backpack", "potted plant"].contains($0.identifier)
-            }, depth: { _ in nil }, focalLengthPixels: focal, imageHeightPixels: Double(resolution.width))
+        let classes = Self.movingClasses
+        let found = await Task.detached(priority: .userInitiated) { () -> [DetectedObject] in
+            let frame = arFrame
+            let detections = detector.detect(in: frame.capturedImage, orientation: .right).filter { classes.contains($0.identifier) }
+            guard !detections.isEmpty else { return [] }
+            let geometry = CameraGeometry(frame.camera)
+            let walkingPose = geometry.pose
+            func objects(depth: (CGRect) -> Double?) -> [DetectedObject] {
+                FrameAnalysis.objects(from: detections, depth: depth, focalLengthPixels: geometry.focalLengthPixels,
+                                      imageHeightPixels: Double(resolution.width), imageWidthPixels: geometry.uprightWidthPixels,
+                                      world: { point, distance in walkingPose == nil ? nil : geometry.worldPoint(portrait: point, depth: distance) })
+            }
+            if let depth = frame.smoothedSceneDepth ?? frame.sceneDepth {
+                return DepthReader.read(depth, camera: frame.camera) { reader in objects(depth: { reader.distance(in: $0) }) } ?? []
+            }
+            return objects(depth: { _ in nil })
         }.value
 
-        var all = elements
-        all += people.compactMap { person -> RoomElement? in
-            guard let distance = person.distanceMeters else { return nil }
-            // Place it on the floor in front of the user along the box's direction.
-            let angle = Double(person.boundingBox.midX - 0.5) * 1.1 // ~63° horizontal field of view in portrait
-            let ahead = pose.forward * cos(angle) + pose.right * sin(angle)
-            let center = pose.position + ahead * distance
-            let half = 0.25
-            return RoomElement(kind: .object, label: person.label, category: person.category, footprint: [
+        // Recognized once, then followed: one element per person (or group), only once confirmed.
+        let tracks = tracker.update(with: DetectionFrame(objects: SceneGrouping.group(found), depthSource: .lidar,
+                                                         pose: CameraGeometry(camera).pose), now: .now)
+        let moving = tracks.filter { $0.isConfirmed && ($0.isVisible || $0.worldPosition != nil) }
+        let people = moving.compactMap { track -> RoomElement? in
+            let center: SIMD2<Double>
+            if let world = track.worldPosition {
+                center = SIMD2(world.x, world.z)
+            } else if let ahead = track.forward, let side = track.lateral {
+                center = pose.position + pose.forward * ahead + pose.right * side
+            } else {
+                return nil
+            }
+            let half = track.label == SceneGrouping.people ? 0.5 : 0.25
+            return RoomElement(kind: .object, label: track.label, category: track.category, footprint: [
                 center + SIMD2(-half, -half), center + SIMD2(half, -half),
                 center + SIMD2(half, half), center + SIMD2(-half, half),
-            ])
+            ], id: track.id)
         }
 
-        let result = IndoorComposer.compose(all, pose: pose)
         return IndoorSnapshot(
-            objects: overlayBoxes(camera: camera, imageSize: imageSize, pose: pose) + people,
-            headline: result.headline,
-            guidance: result.guidance,
-            guidanceIcon: result.guidanceIcon,
-            miniMap: result.miniMap,
-            alert: result.alert,
-            announcementKey: result.announcementKey,
+            elements: elements + people,
+            pose: pose,
+            objects: overlayBoxes(camera: camera, imageSize: imageSize, pose: pose) + moving.filter(\.isVisible).map(\.object),
             coaching: coaching,
             imageSize: imageSize
         )
@@ -139,7 +157,7 @@ final class RoomScanService: IndoorScanServicing {
             let box = CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
                 .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
             guard !box.isNull, box.width > 0.02, box.height > 0.02 else { return nil }
-            return DetectedObject(label: element.label, category: element.category, confidence: 1,
+            return DetectedObject(id: element.id, label: element.label, category: element.category, confidence: 1,
                                   boundingBox: box, distanceMeters: max(placed.distance, 0.1))
         }
     }
@@ -151,25 +169,25 @@ nonisolated extension RoomElement {
     static func from(_ room: CapturedRoom) -> [RoomElement] {
         var elements: [RoomElement] = []
         func add(_ kind: Kind, _ label: String, _ category: ObjectCategory, _ footprint: [SIMD2<Double>],
-                 _ transform: simd_float4x4, _ dimensions: simd_float3) {
+                 _ transform: simd_float4x4, _ dimensions: simd_float3, _ id: UUID) {
             elements.append(RoomElement(kind: kind, label: label, category: category, footprint: footprint,
                                         bottom: Double(transform.columns.3.y - dimensions.y / 2),
-                                        height: Double(dimensions.y)))
+                                        height: Double(dimensions.y), id: id))
         }
         for wall in room.walls {
-            add(.wall, "Wall", .wall, line(wall.transform, wall.dimensions), wall.transform, wall.dimensions)
+            add(.wall, "Wall", .wall, line(wall.transform, wall.dimensions), wall.transform, wall.dimensions, wall.identifier)
         }
         for door in room.doors {
             let isOpen: Bool
             if case .door(let open) = door.category { isOpen = open } else { isOpen = false }
-            add(.door(isOpen: isOpen), "Door", .door, line(door.transform, door.dimensions), door.transform, door.dimensions)
+            add(.door(isOpen: isOpen), "Door", .door, line(door.transform, door.dimensions), door.transform, door.dimensions, door.identifier)
         }
         for opening in room.openings {
-            add(.opening, "Doorway", .door, line(opening.transform, opening.dimensions), opening.transform, opening.dimensions)
+            add(.opening, "Doorway", .door, line(opening.transform, opening.dimensions), opening.transform, opening.dimensions, opening.identifier)
         }
         for object in room.objects {
             let (label, category) = describe(object.category)
-            add(.object, label, category, box(object.transform, object.dimensions), object.transform, object.dimensions)
+            add(.object, label, category, box(object.transform, object.dimensions), object.transform, object.dimensions, object.identifier)
         }
         return elements
     }

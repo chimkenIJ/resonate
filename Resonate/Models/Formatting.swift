@@ -1,30 +1,41 @@
 import Foundation
 
 /// Distances as shown on screen ("40 m") and as spoken ("40 meters").
+/// Distances in feet and miles (US). Everything is measured in meters internally.
 nonisolated enum DistanceText {
+    static let feetPerMeter = 3.28084
+    /// Under a tenth of a mile, distances are said in feet.
+    private static let feetLimit = 528.0
+
+    /// "12 ft", "0.3 mi"
     static func short(_ meters: Double) -> String {
-        if meters >= 1000 {
-            return String(format: "%.1f km", meters / 1000)
-        }
-        return "\(rounded(meters)) m"
+        let feet = meters * feetPerMeter
+        if feet >= feetLimit { return "\(miles(feet)) mi" }
+        return "\(rounded(feet)) ft"
     }
 
+    /// "12 feet", "1 foot", "0.3 miles", "1 mile"
     static func spoken(_ meters: Double) -> String {
-        if meters >= 1000 {
-            let km = (meters / 100).rounded() / 10
-            return km == 1 ? "1 kilometer" : "\(km.formatted()) kilometers"
+        let feet = meters * feetPerMeter
+        if feet >= feetLimit {
+            let value = miles(feet)
+            return value == "1" ? "1 mile" : "\(value) miles"
         }
-        let m = rounded(meters)
-        return m == 1 ? "1 meter" : "\(m) meters"
+        let f = rounded(feet)
+        return f == 1 ? "1 foot" : "\(f) feet"
     }
 
-    /// Whole meters up close, steps of 5 past 20 m, steps of 10 past 100 m.
-    private static func rounded(_ meters: Double) -> Int {
-        switch meters {
+    private static func miles(_ feet: Double) -> String {
+        ((feet / 5280 * 10).rounded() / 10).formatted(.number.precision(.fractionLength(0...1)))
+    }
+
+    /// Whole feet up close, steps of 5 past 10 ft, steps of 10 past 100 ft, so numbers don't flicker.
+    private static func rounded(_ feet: Double) -> Int {
+        switch feet {
         case ..<1: return 1
-        case ..<20: return Int(meters.rounded())
-        case ..<100: return Int((meters / 5).rounded()) * 5
-        default: return Int((meters / 10).rounded()) * 10
+        case ..<10: return Int(feet.rounded())
+        case ..<100: return Int((feet / 5).rounded()) * 5
+        default: return Int((feet / 10).rounded()) * 10
         }
     }
 }

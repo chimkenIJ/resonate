@@ -191,12 +191,24 @@ final class AccountAwarePreferencesService: PreferencesServicing {
         await upload(preferences)
     }
 
+    /// The upload in progress. Uploads run one at a time, each sending the newest settings on the
+    /// phone: two quick changes can't finish out of order and leave the account with the older one.
+    private var uploading: Task<Void, Never>?
+
     private func upload(_ preferences: UserPreferences) async {
-        do {
-            try await remote.save(preferences)
-            local.markSynced()
-        } catch {
-            Log.data.error("Preferences kept on phone; Supabase sync failed (will retry): \(String(describing: error), privacy: .public)")
+        let previous = uploading
+        let next = Task { [weak self] in
+            await previous?.value
+            guard let self, self.local.needsSync, let latest = await self.local.load() else { return }
+            do {
+                try await self.remote.save(latest)
+                // Only "in sync" if nothing changed on the phone while this was uploading.
+                if await self.local.load() == latest { self.local.markSynced() }
+            } catch {
+                Log.data.error("Preferences kept on phone; Supabase sync failed (will retry): \(String(describing: error), privacy: .public)")
+            }
         }
+        uploading = next
+        await next.value
     }
 }

@@ -59,13 +59,14 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
     private var isPreviewing = false
 
     func preview(_ text: String, voiceID: String?) async {
+        guard !Task.isCancelled else { return }
         stop()
         isPreviewing = true
         let id = UUID()
         workerID = id
         isSpeaking = true
         worker = Task { [weak self] in
-            guard let self else { return }
+            guard let self, !Task.isCancelled else { return }
             defer {
                 if self.workerID == id {
                     self.isSpeaking = false
@@ -90,6 +91,7 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
     }
 
     private let deviceVoice = AVSpeechSynthesizer()
+    private var deviceUtterance: AVSpeechUtterance?
     private var player: AVAudioPlayer?
     private var finished: CheckedContinuation<Void, Never>?
     private var pending: [Utterance] = []
@@ -114,6 +116,7 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
     // MARK: SpeechServicing
 
     func speak(_ text: String, priority: SpeechPriority, fragments: [String]?) async {
+        guard !Task.isCancelled else { return }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         if current?.priority == .snapshot && priority != .snapshot { return }
@@ -132,7 +135,12 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
         startWorker()
     }
 
+    func waitUntilFinished() async {
+        while let worker, !Task.isCancelled { await worker.value }
+    }
+
     func stop() {
+        lastSpoken = nil
         pending.removeAll()
         interrupt()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -185,10 +193,12 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
         worker = nil
         player?.stop()
         player = nil
+        deviceUtterance = nil
         if deviceVoice.isSpeaking { deviceVoice.stopSpeaking(at: .immediate) }
         resumeFinished()
         current = nil
         isSpeaking = false
+        isPreviewing = false
         workerID = UUID()
     }
 
@@ -218,6 +228,8 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
     }
 
     private func playClips(_ clips: [Data]) async {
+        guard !Task.isCancelled else { return }
+        let playbackID = workerID
         activateAudioSession()
         for clip in clips {
             if Task.isCancelled { return }
@@ -229,14 +241,16 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
                 if !player.play() { resumeFinished() }
             }
         }
-        player = nil
+        if workerID == playbackID { player = nil }
     }
 
     private func speakOnDevice(_ text: String) async {
+        guard !Task.isCancelled else { return }
         activateAudioSession()
         let utterance = AVSpeechUtterance(string: text)
         utterance.prefersAssistiveTechnologySettings = true
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        deviceUtterance = utterance
         await withCheckedContinuation { continuation in
             finished = continuation
             deviceVoice.speak(utterance)
@@ -244,6 +258,7 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
     }
 
     private func fetch(_ text: String, timeout: TimeInterval, voiceID: String?) async throws -> Data {
+        try Task.checkCancellation()
         nonisolated struct Body: Encodable, Sendable { let text: String; let voiceID: String? }
         return try await client.postForData("speak", body: Body(text: text, voiceID: voiceID), timeout: timeout)
     }
@@ -253,6 +268,9 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
         // Don't take over the microphone session while voice search is listening.
         if session.category != .playAndRecord {
             try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
+        } else {
+            // While recording, make sure speech still comes out of the loudspeaker, not the earpiece.
+            try? session.overrideOutputAudioPort(.speaker)
         }
         try? session.setActive(true)
     }
@@ -265,10 +283,24 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
 
     // MARK: Delegates (called on the main thread)
 
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) { resumeFinished() }
-    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: (any Error)?) { resumeFinished() }
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) { resumeFinished() }
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) { resumeFinished() }
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        guard self.player === player else { return }
+        resumeFinished()
+    }
+    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: (any Error)?) {
+        guard self.player === player else { return }
+        resumeFinished()
+    }
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        guard deviceUtterance === utterance else { return }
+        deviceUtterance = nil
+        resumeFinished()
+    }
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        guard deviceUtterance === utterance else { return }
+        deviceUtterance = nil
+        resumeFinished()
+    }
 }
 
 /// Scene descriptions from Gemini, through the `describe` Edge Function. One photo per request; not stored.

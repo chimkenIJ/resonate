@@ -56,6 +56,8 @@ nonisolated struct RouteStep: Identifiable, Codable, Hashable, Sendable {
     var spokenInstruction: String? = nil
     /// Short form to speak a little before the maneuver: "Turn right onto Plum Street."
     var alertInstruction: String? = nil
+    /// Index into the route polyline where this maneuver happens, for measuring progress along the route.
+    var shapeIndex: Int? = nil
 
     var spoken: String { spokenInstruction ?? "\(instruction)." }
 }
@@ -114,7 +116,7 @@ nonisolated struct RouteHazard: Hashable, Codable, Sendable {
 
     var spoken: String {
         switch kind {
-        case .raisedCurb: "Raised curb ahead. Check the edge with your cane."
+        case .raisedCurb: "Raised curb ahead. Watch the edge."
         case .steps: "Steps ahead."
         }
     }
@@ -131,6 +133,21 @@ nonisolated struct Route: Identifiable, Codable, Hashable, Sendable {
     var polyline: [GeoPoint]
     var avoided: [AvoidedHazard]
     var hazards: [RouteHazard] = []
+    /// Street crossings on the route.
+    var crossings: [GeoPoint] = []
+    /// The building door the route ends at, when OSM maps one.
+    var entrance: RouteEntrance? = nil
+
+    /// Where walking ends: the door if known, otherwise the place itself.
+    var arrivalPoint: GeoPoint { entrance?.coordinate ?? destination.coordinate }
+
+    /// Which way the route leaves the start, in compass degrees (looking about 10 m ahead).
+    var initialBearing: Double? {
+        guard let start = polyline.first,
+              let ahead = polyline.first(where: { start.distance(to: $0) >= 10 }) ?? polyline.last,
+              start.distance(to: ahead) >= 2 else { return nil }
+        return start.bearing(to: ahead)
+    }
 
     /// Meters from `point` to the nearest part of the route line.
     func distanceFromPath(_ point: GeoPoint) -> Double {
@@ -152,6 +169,68 @@ nonisolated struct Route: Identifiable, Codable, Hashable, Sendable {
     var spokenSummary: String {
         let access = isStepFree ? "step-free" : "includes steps"
         return "\(DurationText.spoken(durationSeconds)), \(access)"
+    }
+
+    var spokenOverview: String {
+        let details = features.map(\.label).joined(separator: ", ")
+        return "To \(destination.name). \(spokenSummary)." + (details.isEmpty ? "" : " Along the way: \(details).")
+    }
+}
+
+/// Route wording in terms the user can feel: left, right, ahead. No compass directions, since many
+/// blind walkers can't tell which way north is ("Walk northeast on Peachtree Street" → "Walk on
+/// Peachtree Street"). Street names like "North Avenue" are kept.
+nonisolated enum RouteWording {
+    private static let compass = try! NSRegularExpression(
+        pattern: #"\b((?i:walk|head|go|continue|bear|keep))\s+(?:north|south|east|west)(?:east|west)?\b"#)
+    private static let spaceBeforePunctuation = try! NSRegularExpression(pattern: #"\s+([.,;])"#)
+    private static let bareVerb = try! NSRegularExpression(pattern: #"^(?i:walk|head|go)\.?$"#)
+
+    /// "Turn right onto A Street. Then, in 200 feet, turn left…": the second turn is said when the user gets there.
+    private static let thenClause = try! NSRegularExpression(pattern: #"\s*\bThen,?\s.*$"#)
+
+    static func relative(_ text: String) -> String {
+        var result = thenClause.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "")
+        result = compass.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "$1")
+        result = spaceBeforePunctuation.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "$1")
+        if bareVerb.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)) != nil { return "Start walking." }
+        return result
+    }
+
+    /// How to turn to face the way the route starts, from the way the phone faces now.
+    /// Nil when already facing about the right way.
+    static func orientation(heading: Double, routeBearing: Double) -> String? {
+        let difference = (routeBearing - heading + 540).truncatingRemainder(dividingBy: 360) - 180
+        let side = difference < 0 ? "left" : "right"
+        switch abs(difference) {
+        case ...25: return nil
+        case ...60: return "Turn slightly \(side)."
+        case ...135: return "Turn \(side)."
+        default: return "Turn around."
+        }
+    }
+}
+
+/// A building entrance from OpenStreetMap.
+nonisolated struct RouteEntrance: Codable, Hashable, Sendable {
+    var coordinate: GeoPoint
+    var isMain: Bool
+    /// OSM door type: "automatic", "hinged", "sliding", "revolving", …
+    var door: String?
+
+    /// "the main entrance" / "an entrance"
+    var spokenName: String { isMain ? "the main entrance" : "an entrance" }
+
+    /// "It has an automatic door." Nil when OSM doesn't say.
+    var spokenDoor: String? {
+        switch door {
+        case "automatic": "It has an automatic door."
+        case "revolving": "It has a revolving door."
+        case "sliding": "It has a sliding door."
+        case "hinged", "swinging": "The door swings open; find the handle."
+        case "no": "There's no door, just an opening."
+        default: nil
+        }
     }
 }
 

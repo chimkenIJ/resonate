@@ -183,11 +183,7 @@ final class VoiceAssistant {
 
     /// Waits until the app's voice is quiet.
     private func waitForSpeechToFinish() async {
-        guard let speech = app?.services.speech else { return }
-        try? await Task.sleep(for: .milliseconds(300)) // speech starts a moment after it's queued
-        while speech.isSpeaking, !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(200))
-        }
+        await app?.feedback.waitForSpeech()
     }
 
     /// One utterance. Empty when the user said nothing.
@@ -246,6 +242,8 @@ final class VoiceAssistant {
                     }
                     return
                 }
+                // Changing screens stops whatever is playing, so finish this line first.
+                await waitForSpeechToFinish()
                 state = .thinking
                 var results: [JSONValue] = []
                 for call in reply.content where call["type"]?.stringValue == "tool_use" {

@@ -91,27 +91,45 @@ nonisolated final class LiDARFrameProcessor: NSObject, ARSessionDelegate, @unche
         let pixelBuffer = frame.capturedImage
         let resolution = frame.camera.imageResolution // landscape
         let detections = detector.detect(in: pixelBuffer, orientation: .right)
-        let focal = Double(frame.camera.intrinsics[0][0]) // landscape x = upright vertical
+        let geometry = CameraGeometry(frame.camera)
+        let pose = geometry.pose
+
+        func objects(depth: (CGRect) -> Double?) -> [DetectedObject] {
+            FrameAnalysis.objects(from: detections, depth: depth,
+                                  focalLengthPixels: geometry.focalLengthPixels, // landscape x = upright vertical
+                                  imageHeightPixels: Double(resolution.width),
+                                  imageWidthPixels: geometry.uprightWidthPixels,
+                                  world: { point, distance in pose == nil ? nil : geometry.worldPoint(portrait: point, depth: distance) })
+        }
 
         var labeled: [DetectedObject] = []
         var terrain: [DetectedObject] = []
+        var clearance: PathClearance?
         let depthData = frame.smoothedSceneDepth ?? frame.sceneDepth
         if let depthData {
             DepthReader.read(depthData, camera: frame.camera) { reader in
-                labeled = FrameAnalysis.objects(from: detections, depth: { reader.distance(in: $0) },
-                                                focalLengthPixels: focal, imageHeightPixels: Double(resolution.width))
-                terrain = TerrainAnalyzer.objects(from: TerrainAnalyzer.analyze(reader.terrainSamples()))
+                labeled = objects(depth: { reader.distance(in: $0) })
+                let samples = reader.terrainSamples()
+                // Pinned to the ground ahead, so their distance keeps counting down as the user walks.
+                terrain = TerrainAnalyzer.objects(from: TerrainAnalyzer.analyze(samples)).map { item in
+                    var item = item
+                    if let pose, let distance = item.distanceMeters { item.worldPosition = pose.origin + pose.forward * distance }
+                    return item
+                }
+                clearance = TerrainAnalyzer.clearance(samples)
             }
         } else {
-            labeled = FrameAnalysis.objects(from: detections, depth: { _ in nil },
-                                            focalLengthPixels: focal, imageHeightPixels: Double(resolution.width))
+            labeled = objects(depth: { _ in nil })
         }
 
         relay.fulfillSnapshots(from: pixelBuffer)
         relay.emit(DetectionFrame(
             objects: FrameAnalysis.merge(labeled: labeled, terrain: terrain),
             depthSource: depthData == nil ? .estimated : .lidar,
-            imageSize: CGSize(width: resolution.height, height: resolution.width)
+            imageSize: CGSize(width: resolution.height, height: resolution.width),
+            pose: pose,
+            clearance: clearance,
+            signal: SignalReader.read(detections, in: pixelBuffer, uprightHeightPixels: Double(resolution.width))
         ))
     }
 }
@@ -180,15 +198,18 @@ nonisolated final class CameraFrameProcessor: NSObject, AVCaptureVideoDataOutput
 
         let landscapeWidth = Double(CVPixelBufferGetWidth(pixelBuffer))
         let landscapeHeight = Double(CVPixelBufferGetHeight(pixelBuffer))
+        let detections = detector.detect(in: pixelBuffer, orientation: .right)
         let objects = FrameAnalysis.objects(
-            from: detector.detect(in: pixelBuffer, orientation: .right),
+            from: detections,
             depth: { _ in nil },
             focalLengthPixels: focalLengthPixels,
-            imageHeightPixels: landscapeWidth
+            imageHeightPixels: landscapeWidth,
+            imageWidthPixels: landscapeHeight
         )
         relay.fulfillSnapshots(from: pixelBuffer)
         relay.emit(DetectionFrame(objects: objects, depthSource: .estimated,
-                                  imageSize: CGSize(width: landscapeHeight, height: landscapeWidth)))
+                                  imageSize: CGSize(width: landscapeHeight, height: landscapeWidth),
+                                  signal: SignalReader.read(detections, in: pixelBuffer, uprightHeightPixels: landscapeWidth)))
     }
 }
 

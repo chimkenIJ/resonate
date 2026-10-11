@@ -113,6 +113,7 @@ struct PersonalizeView: View {
         .background(Palette.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task { await model.loadVoices(using: app.services.speech) }
+        .onChange(of: isChoosingVoice) { _, _ in app.feedback.endScreenSpeech() }
         .sheet(isPresented: $isChoosingVoice) {
             VoicePickerView(model: model)
         }

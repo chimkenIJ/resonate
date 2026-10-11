@@ -39,12 +39,12 @@ struct WalkView: View {
         HStack {
             BackButton(accessibilityLabel: model.backLabel, style: .floating)
             Spacer()
-            StatusPill(text: "Watching ahead", accent: .clay)
+            StatusPill(text: model.isStarting ? "Preparing to scan" : "Watching ahead", accent: .clay)
             Spacer()
             IconCircleButton(systemImage: "eye", accessibilityLabel: "Describe the whole scene", style: .floating) {
                 Task { await model.describeScene() }
             }
-            .disabled(model.isDescribing)
+            .disabled(model.isStarting || model.isDescribing)
         }
         .padding(.horizontal, Metrics.screenPadding)
         .padding(.top, 8)
@@ -75,10 +75,15 @@ struct WalkView: View {
 
             GuidanceRow(text: model.guidance, systemImage: model.guidanceIcon.systemImage, accent: .sand)
 
+            if let signal = model.signal {
+                GuidanceRow(text: signal.display, systemImage: signal.systemImage, accent: signal.accent)
+            }
+
             HStack(spacing: 10) {
                 PillButton(title: "Repeat", kind: .secondary, accessibilityHint: "Says the last message again") {
                     Task { await model.repeatLast() }
                 }
+                .disabled(model.isStarting)
                 if model.isNavigating {
                     PillButton(title: "Route", accessibilityHint: "Shows the whole route") {
                         dismiss()
@@ -89,6 +94,23 @@ struct WalkView: View {
                         app.router.openSearch(listen: true)
                     }
                 }
+                // Between start and end, finding a door is still one small tap away.
+                if !model.showsFindDoor {
+                    IconCircleButton(systemImage: "door.left.hand.open", accessibilityLabel: "Find door",
+                                     accessibilityHint: "Looks for the nearest door with the camera and says how to open it") {
+                        Task { await model.findDoor() }
+                    }
+                    .disabled(model.isDescribing)
+                }
+            }
+
+            // Only when a door is likely: at the start (getting out of a building), indoors, or near the destination.
+            if model.showsFindDoor {
+                PillButton(title: "Find door", kind: .secondary,
+                           accessibilityHint: "Looks for the nearest door with the camera and says how to open it") {
+                    Task { await model.findDoor() }
+                }
+                .disabled(model.isDescribing)
             }
         }
     }

@@ -17,6 +17,7 @@ supabase/.env
 
 # Map server secrets
 server/.env
+server/.env.cloud
 supabase/functions/.env.local
 
 .DS_Store

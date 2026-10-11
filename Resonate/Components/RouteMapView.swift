@@ -36,7 +36,7 @@ struct RouteMapView: View {
             }
             .annotationTitles(.hidden)
 
-            Annotation(route.destination.name, coordinate: route.destination.coordinate.coordinate, anchor: .bottomLeading) {
+            Annotation(route.destination.name, coordinate: route.arrivalPoint.coordinate, anchor: .bottomLeading) {
                 Image(systemName: "mappin")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(Palette.onAccent)
@@ -80,7 +80,7 @@ struct RouteMapView: View {
 
     /// Fits the whole route with some padding.
     private var region: MKCoordinateRegion {
-        let points = route.polyline + [route.destination.coordinate] + (currentLocation.map { [$0] } ?? [])
+        let points = route.polyline + [route.arrivalPoint] + (currentLocation.map { [$0] } ?? [])
         let lats = points.map(\.latitude)
         let lons = points.map(\.longitude)
         let minLat = lats.min() ?? 0, maxLat = lats.max() ?? 0

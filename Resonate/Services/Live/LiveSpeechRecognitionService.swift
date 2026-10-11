@@ -142,7 +142,11 @@ final class LiveSpeechRecognitionService: SpeechRecognitionServicing {
         }
         engine = nil
         request?.endAudio()
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        let session = AVAudioSession.sharedInstance()
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        // Back to playback: the recording mode plays speech much quieter (and could use the earpiece),
+        // which made the app's voice hard to hear after any voice search.
+        try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
     }
 
     private func teardown() {
