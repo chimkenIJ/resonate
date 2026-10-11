@@ -25,6 +25,7 @@ What the app does:
 - Search for places and plan accessible walking routes. Maps only cover Georgia, in the US.
 - Turn-by-turn walking directions with obstacle warnings from the camera ("navigation").
 - Walk mode without a destination: the camera warns about obstacles ahead.
+- Scan the area: the camera describes what's around the user. It doesn't warn about obstacles.
 - Indoor scanning: finds walls, doors, and furniture in a room.
 - Naming colors the camera points at.
 - Saved places in folders such as Classes, Home, and Food.
@@ -74,8 +75,8 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "open_camera_mode",
     description:
-      "Opens a full-screen camera tool. walk: obstacle warnings without a destination. indoor_scan: finds walls, doors, and objects in a room. colors: names the color the camera points at.",
-    input_schema: schema({ mode: { type: "string", enum: ["walk", "indoor_scan", "colors"] } }),
+      "Opens a full-screen camera tool. walk: obstacle warnings without a destination. scan_area: describes what's around the user out loud (no obstacle warnings). indoor_scan: finds walls, doors, and objects in a room. colors: names the color the camera points at.",
+    input_schema: schema({ mode: { type: "string", enum: ["walk", "scan_area", "indoor_scan", "colors"] } }),
   },
   {
     name: "close_screen",

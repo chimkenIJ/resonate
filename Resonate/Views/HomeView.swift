@@ -39,8 +39,8 @@ struct HomeView: View {
 
             VStack(spacing: 16) {
                 if needs.contains(.gettingAround) {
-                    tile("Walk outside", "Warns you about obstacles", "location", .sand, tileHeight) {
-                        app.router.cover = .walk(nil)
+                    tile("Scan the area", "Tells you what's around you", "eye", .sand, tileHeight) {
+                        app.router.cover = .scanArea
                     }
                     tile("Scan indoors", "Finds walls, doors, and things", "viewfinder", .sage, tileHeight) {
                         app.router.cover = .indoor

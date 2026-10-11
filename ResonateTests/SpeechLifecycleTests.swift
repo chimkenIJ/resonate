@@ -41,6 +41,23 @@ struct SpeechLifecycleTests {
         #expect(!speech.log.contains { $0.priority == .snapshot })
     }
 
+    @Test func scanAreaAnnouncesThenDescribes() async throws {
+        let app = AppModel(services: .mock())
+        let speech = try #require(app.services.speech as? MockSpeechService)
+        app.router.cover = .scanArea
+        let model = ScanAreaViewModel(services: app.services, feedback: app.feedback)
+        let task = Task { await model.run() }
+        for _ in 0..<60 where model.sceneDescription == nil {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        task.cancel()
+        #expect(speech.log.first?.text == "Scanning the area. Hold the phone in front of you.")
+        #expect(model.sceneDescription != nil)
+        #expect(speech.log.contains { $0.priority == .snapshot })
+        // Describing only: no obstacle alerts.
+        #expect(!speech.log.contains { $0.priority == .safety })
+    }
+
     @Test func closingIndoorScreenDiscardsLateDescription() async throws {
         let app = AppModel(services: .mock())
         let speech = try #require(app.services.speech as? MockSpeechService)

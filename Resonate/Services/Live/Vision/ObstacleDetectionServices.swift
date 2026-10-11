@@ -11,6 +11,7 @@ import os
 nonisolated final class FrameRelay: @unchecked Sendable {
     private struct State {
         var handler: (@Sendable (DetectionFrame) -> Void)?
+        var detecting = true
         var snapshotWaiters: [CheckedContinuation<Data?, Never>] = []
     }
 
@@ -19,6 +20,12 @@ nonisolated final class FrameRelay: @unchecked Sendable {
     func setHandler(_ handler: (@Sendable (DetectionFrame) -> Void)?) {
         state.withLock { $0.handler = handler }
         if handler == nil { finishSnapshots(with: nil) }
+    }
+
+    /// False while the camera only serves snapshots (scan the area): frames skip object detection.
+    var isDetecting: Bool {
+        get { state.withLock { $0.detecting } }
+        set { state.withLock { $0.detecting = newValue } }
     }
 
     func emit(_ frame: DetectionFrame) {
@@ -89,6 +96,10 @@ nonisolated final class LiDARFrameProcessor: NSObject, ARSessionDelegate, @unche
         lastProcessed = now
 
         let pixelBuffer = frame.capturedImage
+        guard relay.isDetecting else {
+            relay.fulfillSnapshots(from: pixelBuffer)
+            return
+        }
         let resolution = frame.camera.imageResolution // landscape
         let detections = detector.detect(in: pixelBuffer, orientation: .right)
         let geometry = CameraGeometry(frame.camera)
@@ -153,8 +164,9 @@ final class LiDARObstacleDetectionService: ObstacleDetectionServicing {
 
     func requestPermission() async -> Bool { await CameraAccess.request() }
 
-    func frames() -> AsyncStream<DetectionFrame> {
+    func frames(detecting: Bool) -> AsyncStream<DetectionFrame> {
         AsyncStream { continuation in
+            processor.relay.isDetecting = detecting
             processor.relay.setHandler { continuation.yield($0) }
             let configuration = ARWorldTrackingConfiguration()
             configuration.frameSemantics = [.smoothedSceneDepth]
@@ -195,6 +207,10 @@ nonisolated final class CameraFrameProcessor: NSObject, AVCaptureVideoDataOutput
         guard now.timeIntervalSince(lastProcessed) >= FrameAnalysis.analysisInterval || relay.wantsSnapshot,
               let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         lastProcessed = now
+        guard relay.isDetecting else {
+            relay.fulfillSnapshots(from: pixelBuffer)
+            return
+        }
 
         let landscapeWidth = Double(CVPixelBufferGetWidth(pixelBuffer))
         let landscapeHeight = Double(CVPixelBufferGetHeight(pixelBuffer))
@@ -224,8 +240,9 @@ final class CameraObstacleDetectionService: ObstacleDetectionServicing {
 
     func requestPermission() async -> Bool { await CameraAccess.request() }
 
-    func frames() -> AsyncStream<DetectionFrame> {
+    func frames(detecting: Bool) -> AsyncStream<DetectionFrame> {
         AsyncStream { continuation in
+            processor.relay.isDetecting = detecting
             processor.relay.setHandler { continuation.yield($0) }
             configureIfNeeded()
             nonisolated(unsafe) let session = session

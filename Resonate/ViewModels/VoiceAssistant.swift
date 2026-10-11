@@ -309,6 +309,7 @@ final class VoiceAssistant {
         case .walk(nil): lines.append("Screen: walk mode, camera warning about obstacles.")
         case .indoor: lines.append("Screen: indoor scan camera.")
         case .colors: lines.append("Screen: color naming camera.")
+        case .scanArea: lines.append("Screen: scan the area, camera describing the surroundings.")
         case nil:
             var screen = "\(router.tab.title) tab"
             switch router.paths[router.tab]?.last {

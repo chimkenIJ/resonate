@@ -57,11 +57,11 @@ enum AppScreen: String, AppEnum {
 }
 
 enum CameraMode: String, AppEnum {
-    case walk, indoorScan = "indoor_scan", colors
+    case walk, scanArea = "scan_area", indoorScan = "indoor_scan", colors
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Camera mode"
     static let caseDisplayRepresentations: [CameraMode: DisplayRepresentation] = [
-        .walk: "Walk mode", .indoorScan: "Indoor scan", .colors: "Colors",
+        .walk: "Walk mode", .scanArea: "Scan the area", .indoorScan: "Indoor scan", .colors: "Colors",
     ]
 }
 
@@ -151,7 +151,7 @@ extension CloseScreenIntent {
 struct OpenCameraModeIntent: AssistantToolIntent {
     static let toolName = "open_camera_mode"
     static let title: LocalizedStringResource = "Open Camera Mode"
-    static let description = IntentDescription("Opens walk mode, indoor scanning, or color naming.")
+    static let description = IntentDescription("Opens walk mode, scan the area, indoor scanning, or color naming.")
     static let openAppWhenRun = true
 
     @Parameter(title: "Mode") var mode: CameraMode
@@ -167,6 +167,7 @@ struct OpenCameraModeIntent: AssistantToolIntent {
     func run(on app: AppModel) async throws -> IntentOutcome {
         app.router.cover = switch mode {
         case .walk: .walk(nil)
+        case .scanArea: .scanArea
         case .indoorScan: .indoor
         case .colors: .colors
         }
