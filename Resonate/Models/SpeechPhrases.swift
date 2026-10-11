@@ -9,7 +9,7 @@ nonisolated enum SpeechPhrases {
 
         // Things.
         phrases.formUnion(ObjectCatalog.entries.values.map(\.label))
-        phrases.formUnion(["Curb drop", "Drop-off", "Step up", "Obstacle", TerrainAnalyzer.stairsUpLabel, TerrainAnalyzer.stairsDownLabel])
+        phrases.formUnion(["Curb drop", "Drop-off", "Obstacle", TerrainAnalyzer.stairsUpLabel, TerrainAnalyzer.stairsDownLabel])
         phrases.formUnion(SceneGrouping.labels)
         // Indoors: things the camera names, and steps from the depth sensor.
         phrases.formUnion(IndoorCatalog.labels)

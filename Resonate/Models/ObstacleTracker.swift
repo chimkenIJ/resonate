@@ -152,7 +152,7 @@ nonisolated struct ObstacleTracker {
 
     // MARK: Matching
 
-    /// Same name, the same kind of thing (Seat / Table, Step up / Stairs, Person / People), a name this
+    /// Same name, the same kind of thing (Seat / Table, Curb drop / Drop-off, Person / People), a name this
     /// track has been seen as before, or a plain "Obstacle" from depth (often the same thing YOLO names
     /// in another frame). Anything else must overlap closely to count as the same thing.
     private static func canMatch(_ track: TrackedObstacle, _ observation: DetectedObject) -> Bool {
