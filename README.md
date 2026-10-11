@@ -46,9 +46,18 @@ Outdoor search, routing, and accessibility features are scoped to Atlanta and Ge
 
 The current region checks use a Georgia bounding box, which includes small parts of neighboring states. See the [backend setup guide](docs/BACKEND_SETUP.md#2e-exact-georgia-border-optional) for loading the exact state boundary.
 
-## Run the demo
+## Requirements
 
-You need a Mac with Xcode and either an iPhone or an iOS simulator. The deployment target is iOS 17.0; use a recent Xcode release compatible with the project's Swift syntax.
+| Goal | Requirements |
+| --- | --- |
+| Explore the demo interface | Mac, compatible Xcode release, and an iPhone simulator or iPhone |
+| Try live camera tools | Physical iPhone running iOS 17 or later, camera permission, and live app configuration |
+| Scan indoor rooms | Supported LiDAR iPhone |
+| Run local routing services | Mac with Docker Desktop, Node.js/npm, and Python 3 |
+
+The deployment target is iOS 17.0. Use a recent Xcode release compatible with the project's Swift syntax; the minimum iOS version does not specify the required Xcode version.
+
+## Run the demo
 
 1. Clone this repository and open `Resonate.xcodeproj` in Xcode.
 2. Let Xcode resolve the Swift packages. If needed, use **File → Packages → Resolve Package Versions**.
