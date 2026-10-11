@@ -165,6 +165,17 @@ Color recognition has a live, on-device implementation that samples the center o
 
 ## Limits
 
-OSM accessibility coverage varies, and a route may still include steps or unverified crossings. Camera detection can miss objects, and non-LiDAR distance estimates are approximate. Resonate is a prototype that supplements a cane or guide dog; it does not replace them.
+- **Routing:** OSM accessibility coverage varies. A suggested route may include steps, missing curb information, or unverified crossings.
+- **Detection:** camera detection can miss objects. Object-size distance estimates are approximate and depend on the detected object and its visible size.
+- **Hardware:** indoor room scanning needs supported LiDAR hardware; simulator behavior does not validate physical sensors or feedback.
+- **Connectivity:** remote search, routing, and scene descriptions depend on available services and network access.
+
+Resonate is a prototype that supplements a cane or guide dog; it does not replace them. This README does not claim measured navigation or detection accuracy.
+
+## Documentation
+
+- [Backend setup](docs/BACKEND_SETUP.md): Auth0, Supabase, app configuration, and account troubleshooting.
+- [Map server setup](docs/MAP_SERVER.md): map imports, routing, geocoding, and accessibility data.
+- [Model notes](Resonate/Resources/Models/README.md): YOLO export instructions and licensing.
 
 Map data: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
