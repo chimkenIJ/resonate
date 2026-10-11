@@ -427,3 +427,6 @@ verify_jwt = false
 
 [functions.describe]
 verify_jwt = false
+
+[functions.assistant]
+verify_jwt = false

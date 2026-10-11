@@ -18,7 +18,7 @@ struct RootView: View {
                     await app.didAuthenticate(state)
                 })
             case .onboarding, .ready:
-                MainTabView(searchModel: DestinationSearchViewModel(services: app.services, feedback: app.feedback))
+                MainTabView()
             }
         }
         .background(Palette.background.ignoresSafeArea())

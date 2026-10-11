@@ -81,6 +81,10 @@ struct PersonalizeView: View {
                 }
                 .accessibilityLabel("Voice: \(model.currentVoiceName)")
 
+                if !isOnboarding {
+                    assistantSection
+                }
+
 
                 if let message = model.message {
                     Text(message)
@@ -143,6 +147,23 @@ struct PersonalizeView: View {
                     model.toggle(channel)
                 }
             }
+        }
+    }
+
+    /// Kept on this phone rather than in the account, like the microphone's position.
+    private var assistantSection: some View {
+        let assistant = app.assistant
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Voice assistant")
+            ToggleTile(title: assistant.isEnabled ? "On" : "Off", accent: .sand, isOn: assistant.isEnabled,
+                       accessibilityHint: "Shows a microphone on every screen. Tap it and say what you need, like find a coffee shop.") {
+                assistant.isEnabled.toggle()
+            }
+            .accessibilityLabel("Voice assistant")
+            .accessibilityValue(assistant.isEnabled ? "On" : "Off")
+            Text("Tap the microphone, then ask for a place, a route, or a screen. You can also say \"Talk to Resonate\" to Siri.")
+                .appFont(.body)
+                .foregroundStyle(Palette.textSecondary)
         }
     }
 

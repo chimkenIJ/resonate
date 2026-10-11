@@ -66,15 +66,41 @@ final class DestinationSearchViewModel {
         guard !text.isEmpty else { return }
         phase = .searching
         do {
-            let here = try await currentLocation(timeout: 8)
-            guard GeorgiaRegion.contains(here) else { throw AppError.outsideGeorgia }
-            results = try await geocoding.search(text, near: here, limit: resultLimit)
+            results = try await places(matching: text)
             phase = .results
             await feedback.announce(spokenResults, priority: .info)
         } catch {
             results = []
-            await fail((error as? AppError) ?? .server(message: "Search isn't working right now. Try again in a moment."))
+            await fail(Self.appError(error))
         }
+    }
+
+    /// Search for the voice assistant: shows the results on this screen but doesn't read them out,
+    /// because the assistant answers in its own words.
+    func searchQuietly(_ text: String) async throws -> [Place] {
+        cancelListening()
+        query = text
+        phase = .searching
+        do {
+            results = try await places(matching: text)
+            phase = .results
+            return results
+        } catch {
+            results = []
+            let appError = Self.appError(error)
+            phase = .failed(appError.spokenMessage)
+            throw appError
+        }
+    }
+
+    private func places(matching text: String) async throws -> [Place] {
+        let here = try await currentLocation(timeout: 8)
+        guard GeorgiaRegion.contains(here) else { throw AppError.outsideGeorgia }
+        return try await geocoding.search(text, near: here, limit: resultLimit)
+    }
+
+    private static func appError(_ error: Error) -> AppError {
+        (error as? AppError) ?? .server(message: "Search isn't working right now. Try again in a moment.")
     }
 
     private func listen() async {

@@ -1,15 +1,23 @@
 import SwiftUI
 
-/// Bottom navigation: Home, Search, a raised camera button, Saved, Settings.
+/// Bottom navigation: Home, Search, a raised middle button, Saved, Settings. The middle button is
+/// the voice assistant's push-to-talk microphone when it's on, otherwise the camera.
 struct ResonateTabBar: View {
     @Binding var selection: AppTab
+    var assistant: VoiceAssistant?
     let onCamera: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
             item(.home)
             item(.search)
-            cameraButton
+            if let assistant {
+                AssistantTalkButton(assistant: assistant)
+                    .frame(maxWidth: .infinity)
+                    .offset(y: -20)
+            } else {
+                cameraButton
+            }
             item(.saved)
             item(.settings)
         }

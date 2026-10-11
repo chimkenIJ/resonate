@@ -2,12 +2,12 @@ import AVFoundation
 import Foundation
 import Speech
 
-/// Voice input for destination search with SFSpeechRecognizer. Runs on-device when the phone
-/// supports it, so it works offline and audio never leaves the phone.
+/// Voice input for destination search and the voice assistant, with SFSpeechRecognizer.
+/// iOS decides whether to recognize on the phone or with Apple's speech service.
 ///
 /// The microphone is on only while listening:
-/// - `stop()` (the user taps the mic again, or they pause) turns the mic off at once and finishes
-///   with what was heard.
+/// - `stop()` (the user taps the mic again or lets go of push-to-talk, or they pause) turns the
+///   mic off at once and finishes with what was heard.
 /// - `cancel()` (leaving the screen) turns it off and discards the result.
 final class LiveSpeechRecognitionService: SpeechRecognitionServicing {
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
@@ -25,6 +25,8 @@ final class LiveSpeechRecognitionService: SpeechRecognitionServicing {
     private let noSpeechTimeout: TimeInterval = 6
     /// Never listen longer than this.
     private let maxDuration: TimeInterval = 12
+    /// Push-to-talk: the user decides when to stop, up to this long.
+    private let maxHeldDuration: TimeInterval = 60
     /// After the mic is off, wait this long for the recognizer's final result.
     private let finalResultGrace: Duration = .milliseconds(1500)
 
@@ -38,10 +40,10 @@ final class LiveSpeechRecognitionService: SpeechRecognitionServicing {
         return await AVAudioApplication.requestRecordPermission()
     }
 
-    func transcribe() -> AsyncThrowingStream<String, Error> {
+    func transcribe(endsOnPause: Bool) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             do {
-                try start(continuation)
+                try start(continuation, endsOnPause: endsOnPause)
             } catch {
                 continuation.finish(throwing: error)
             }
@@ -70,7 +72,7 @@ final class LiveSpeechRecognitionService: SpeechRecognitionServicing {
 
     // MARK: - Lifecycle
 
-    private func start(_ continuation: AsyncThrowingStream<String, Error>.Continuation) throws {
+    private func start(_ continuation: AsyncThrowingStream<String, Error>.Continuation, endsOnPause: Bool) throws {
         teardown()
         guard let recognizer, recognizer.isAvailable else {
             throw AppError.server(message: "Voice input isn't available right now. You can type the place instead.")
@@ -83,9 +85,9 @@ final class LiveSpeechRecognitionService: SpeechRecognitionServicing {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.addsPunctuation = false
-        if recognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = true
-        }
+        // Not required: requiring on-device recognition fails outright when the phone's speech
+        // model isn't ready, and Apple's service copes better with noise.
+        request.requiresOnDeviceRecognition = false
 
         let engine = AVAudioEngine()
         Self.installTap(on: engine.inputNode, feeding: request)
@@ -101,7 +103,7 @@ final class LiveSpeechRecognitionService: SpeechRecognitionServicing {
             guard let self else { return }
             Task { @MainActor in self.noteTranscript(text) }
         }
-        startWatchdog()
+        startWatchdog(endsOnPause: endsOnPause)
     }
 
     private func noteTranscript(_ text: String) {
@@ -110,7 +112,7 @@ final class LiveSpeechRecognitionService: SpeechRecognitionServicing {
         lastChange = .now
     }
 
-    private func startWatchdog() {
+    private func startWatchdog(endsOnPause: Bool) {
         let started = Date.now
         watchdog = Task { [weak self] in
             while !Task.isCancelled {
@@ -120,7 +122,9 @@ final class LiveSpeechRecognitionService: SpeechRecognitionServicing {
                 let heard = !self.lastTranscript.isEmpty
                 let paused = heard && now.timeIntervalSince(self.lastChange) >= self.silenceTimeout
                 let nothing = !heard && now.timeIntervalSince(started) >= self.noSpeechTimeout
-                if paused || nothing || now.timeIntervalSince(started) >= self.maxDuration {
+                let elapsed = now.timeIntervalSince(started)
+                let done = endsOnPause ? paused || nothing || elapsed >= self.maxDuration : elapsed >= self.maxHeldDuration
+                if done {
                     self.stop()
                     return
                 }

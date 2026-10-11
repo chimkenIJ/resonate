@@ -100,16 +100,23 @@ extension SpeechServicing {
     }
 }
 
-/// Voice input for destination search. Runs on-device so it works without a connection.
+/// Voice input for destination search and the voice assistant.
 /// The microphone is only on between `transcribe()` and `stop()`/`cancel()`, or until a pause.
 protocol SpeechRecognitionServicing: AnyObject {
     func requestAuthorization() async -> Bool
-    /// Partial transcripts as the user talks. Finishes when they pause or `stop()` is called.
-    func transcribe() -> AsyncThrowingStream<String, Error>
+    /// Partial transcripts as the user talks. Finishes when `stop()` is called or, when
+    /// `endsOnPause` is true, when they pause.
+    func transcribe(endsOnPause: Bool) -> AsyncThrowingStream<String, Error>
     /// Turns the microphone off now; the stream finishes with what was heard.
     func stop()
     /// Turns the microphone off and ends the stream; the result is discarded.
     func cancel()
+}
+
+extension SpeechRecognitionServicing {
+    func transcribe() -> AsyncThrowingStream<String, Error> {
+        transcribe(endsOnPause: true)
+    }
 }
 
 protocol HapticsServicing: AnyObject {
@@ -157,6 +164,21 @@ protocol IndoorScanServicing: AnyObject {
 /// On-demand descriptions from Gemini, through a Supabase Edge Function.
 protocol SceneDescriptionServicing: AnyObject {
     func describe(jpeg: Data, setting: SceneSetting) async throws -> String
+}
+
+// MARK: - Voice assistant
+
+/// One reply from the assistant model. `content` holds the raw API content blocks (text,
+/// tool_use, thinking, ...) so they can go back into the conversation unchanged.
+nonisolated struct AssistantReply: Sendable {
+    var content: [JSONValue]
+    var stopReason: String
+}
+
+/// Claude, through the `assistant` Edge Function. The app keeps the conversation and runs the tools.
+protocol AssistantServicing: AnyObject {
+    /// `messages` is the whole conversation in Messages API form, ending with a user turn.
+    func respond(to messages: [JSONValue]) async throws -> AssistantReply
 }
 
 /// Color recognition module ("Telling colors apart").

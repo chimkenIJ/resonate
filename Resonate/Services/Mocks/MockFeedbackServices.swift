@@ -31,10 +31,25 @@ final class MockSpeechService: SpeechServicing {
 final class MockSpeechRecognitionService: SpeechRecognitionServicing {
     /// What the mock "hears". Change it in previews to test other searches.
     var scriptedTranscript = "Kroger"
+    /// After hearing the script, the mock hears silence for this long, like a user who said one
+    /// thing and stopped. Without it the always-listening voice assistant would repeat forever.
+    var quietAfterSpeaking: Duration = .seconds(20)
+    private var lastSpoke: ContinuousClock.Instant?
 
     func requestAuthorization() async -> Bool { true }
 
-    func transcribe() -> AsyncThrowingStream<String, Error> {
+    func transcribe(endsOnPause: Bool) -> AsyncThrowingStream<String, Error> {
+        let now = ContinuousClock.now
+        if let lastSpoke, now - lastSpoke < quietAfterSpeaking {
+            return AsyncThrowingStream { continuation in
+                let task = Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    continuation.finish()
+                }
+                continuation.onTermination = { _ in task.cancel() }
+            }
+        }
+        lastSpoke = now
         let words = scriptedTranscript
         return AsyncThrowingStream { continuation in
             let task = Task {
