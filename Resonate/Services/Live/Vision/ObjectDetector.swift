@@ -94,11 +94,11 @@ nonisolated enum FrameAnalysis {
                 if ObjectCatalog.sizeFits(typicalHeight: entry.typicalHeight, distance: measured, boxHeightPixels: boxHeightPixels,
                                           focalLengthPixels: focalLengthPixels, touchesEdge: touchesEdge) {
                     distance = measured
-                } else if entry.category == .person, measured < (estimate ?? 0) * 0.5 {
-                    // LiDAR hit something in front of a far-away person: trust the size instead.
+                } else if entry.category == .person || entry.category == .vehicle, measured < (estimate ?? 0) * 0.5 {
+                    // LiDAR hit something in front of a far-away person or car: trust the size instead.
                     distance = estimate
-                } else if entry.category == .person {
-                    // A "person" the wrong size for where it is: most likely not a person.
+                } else if entry.category == .person || entry.category == .vehicle {
+                    // A "person" or "car" the wrong size for where it is: most likely not one.
                     return nil
                 } else {
                     distance = measured

@@ -46,10 +46,14 @@ nonisolated enum ObjectCatalog {
     /// People are YOLO's most common false alarm (posters, reflections, mannequins, shadows): be stricter.
     static let personConfidence: Float = 0.65
 
+    /// Vehicles are the next most common false alarm (bins, boxes, parked bikes read as cars).
+    static let vehicleConfidence: Float = 0.6
+
     static func minimumConfidence(for identifier: String) -> Float {
         switch identifier {
         case "traffic light": signalConfidence
         case "person": personConfidence
+        case "car", "truck", "bus", "train", "motorcycle", "bicycle": vehicleConfidence
         default: minimumConfidence
         }
     }
@@ -62,6 +66,22 @@ nonisolated enum ObjectCatalog {
         guard !touchesEdge, typicalHeight >= 0.5, focalLengthPixels > 0 else { return true }
         let impliedHeight = boxHeightPixels / focalLengthPixels * distance
         return (0.35 * typicalHeight...2.2 * typicalHeight).contains(impliedHeight)
+    }
+
+    /// Walking outside, the user needs to know *that* something is in the way, not what the detector
+    /// guesses it is: a bollard reads as a post one frame and a toilet the next. Everything that stays
+    /// put becomes "Obstacle". People, animals, bikes, and vehicles keep their names because they move;
+    /// curbs, steps, and stairs keep theirs because they're handled differently.
+    static func forWalking(_ object: DetectedObject) -> DetectedObject {
+        switch object.category {
+        case .person, .vehicle, .stairs, .dropOff: return object
+        default:
+            guard object.label != "Animal" else { return object }
+            var general = object
+            general.label = ObstacleTracker.genericLabel
+            general.category = .obstacle
+            return general
+        }
     }
 
     static func entry(for identifier: String) -> Entry? {

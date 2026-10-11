@@ -102,7 +102,7 @@ nonisolated struct ObstacleTracker {
         // Greedy matching: best pairs first, same label only.
         var pairs: [(track: Int, observation: Int, score: Double)] = []
         for (t, track) in tracks.enumerated() {
-            for (o, observation) in observations.enumerated() {
+            for (o, observation) in observations.enumerated() where Self.mayBeSame(track, observation) {
                 let related = Self.canMatch(track, observation)
                 if let score = Self.matchScore(track, observation, strict: !related) {
                     pairs.append((t, o, related ? score : score - 0.5))
@@ -130,8 +130,8 @@ nonisolated struct ObstacleTracker {
         tracks = tracks.compactMap { track in
             var track = track
             track.hits = Array(track.hits.suffix(Self.window))
-            // People need one more sighting: they're the most common false alarm.
-            let needed = track.category == .person ? Self.confirmHits + 1 : Self.confirmHits
+            // People and vehicles need one more sighting: they're the most common false alarms.
+            let needed = track.category == .person || track.category == .vehicle ? Self.confirmHits + 1 : Self.confirmHits
             if !track.isConfirmed && track.hits.filter({ $0 }).count >= needed { track.isConfirmed = true }
             if track.isConfirmed {
                 guard now.timeIntervalSince(track.lastSeen) <= Self.keepAlive else { return nil }
@@ -158,6 +158,14 @@ nonisolated struct ObstacleTracker {
     private static func canMatch(_ track: TrackedObstacle, _ observation: DetectedObject) -> Bool {
         observation.label == track.label || observation.category == track.category || track.labelVotes[observation.label] != nil
             || observation.label == genericLabel || track.label == genericLabel
+    }
+
+    /// Curbs, drop-offs, and stairs come from the ground's shape, not from a guess about an object:
+    /// they're never the same thing as a post or a person standing there.
+    private static func mayBeSame(_ track: TrackedObstacle, _ observation: DetectedObject) -> Bool {
+        let ground: Set<ObjectCategory> = [.stairs, .dropOff]
+        let trackIsGround = ground.contains(track.category), observationIsGround = ground.contains(observation.category)
+        return trackIsGround == observationIsGround
     }
 
     static let genericLabel = "Obstacle"
@@ -197,16 +205,12 @@ nonisolated struct ObstacleTracker {
 
         track.boundingBox = observation.boundingBox
         track.lastSeen = now
-        // A real name beats the plain "Obstacle" from depth; otherwise the most common name wins.
-        let vote = observation.label == Self.genericLabel ? 0 : 1
-        track.labelVotes[observation.label, default: 0] += vote
-        if let best = track.labelVotes.filter({ $0.value > 0 }).max(by: { $0.value < $1.value }) {
-            if best.key != track.label, best.value > (track.labelVotes[track.label] ?? 0) {
-                track.label = best.key
-                track.category = observation.label == best.key ? observation.category : track.category
-            }
-        } else {
-            track.label = observation.label
+        // The most common name wins, and a new one needs more sightings than the current one, so a
+        // stray "car" guess or two can't rename a post. ("Obstacle" counts like any other name.)
+        track.labelVotes[observation.label, default: 0] += 1
+        if let best = track.labelVotes.max(by: { $0.value < $1.value }), best.key != track.label,
+           best.value > (track.labelVotes[track.label] ?? 0) {
+            track.label = best.key
             track.category = observation.category
         }
         if observation.label == track.label { track.category = observation.category }

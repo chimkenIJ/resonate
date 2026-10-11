@@ -78,6 +78,12 @@ struct TerrainAnalyzerTests {
         #expect(findings.map(\.kind) == [.stepUp])
     }
 
+    @Test func aSteepGrassyBankIsNotStairs() {
+        // 45% slope: as steep as stairs overall, but smooth, with no treads or risers.
+        let findings = TerrainAnalyzer.analyze(ground { chest + 0.45 * max(0, $0 - 2) })
+        #expect(!findings.contains { $0.kind == .stairsUp })
+    }
+
     @Test func aSteepRampIsNotStairs() {
         // 12% ramp: steeper than allowed for wheelchairs, still nowhere near stair steepness.
         #expect(!TerrainAnalyzer.analyze(ground { chest + 0.12 * max(0, $0 - 1.5) }).contains { $0.kind == .stairsUp })

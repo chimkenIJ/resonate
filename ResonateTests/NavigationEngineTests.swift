@@ -125,6 +125,30 @@ struct NavigationEngineTests {
         #expect(abs(last - 30) < 2)
     }
 
+    @Test func aQuickSecondTurnIsNotAnnouncedDuringTheFirst() {
+        // Right at 100 m north, then left only 20 m later.
+        let destination = Place(id: "test", name: "Howey", address: "", coordinate: point(north: 150, east: 20))
+        let route = Route(
+            id: UUID(), destination: destination, durationSeconds: 120, distanceMeters: 170, isStepFree: true, features: [],
+            steps: [
+                RouteStep(id: 0, instruction: "Start walking", distanceMeters: 100, maneuver: .depart, start: point(north: 0)),
+                RouteStep(id: 1, instruction: "Turn right onto Plum Street", distanceMeters: 20, maneuver: .right, start: point(north: 100)),
+                RouteStep(id: 2, instruction: "Turn left onto Oak Street", distanceMeters: 50, maneuver: .left, start: point(north: 100, east: 20)),
+                RouteStep(id: 3, instruction: "Arrive", distanceMeters: 0, maneuver: .arrive, start: point(north: 150, east: 20)),
+            ],
+            polyline: [point(north: 0), point(north: 100), point(north: 100, east: 20), point(north: 150, east: 20)],
+            avoided: []
+        )
+        var engine = NavigationEngine(route: route)
+        _ = engine.update(fix(north: 75, at: 0))
+        #expect(engine.update(fix(north: 97, at: 8)) == [.reached(stepIndex: 1)])
+        // Still turning right: no "turn left" yet.
+        #expect(engine.update(fix(north: 100, east: 2, at: 10)).isEmpty)
+        #expect(engine.nextStep?.instruction == "Turn left onto Oak Street")
+        // The left turn is said at the left turn.
+        #expect(engine.update(fix(north: 100, east: 16, at: 14)) == [.reached(stepIndex: 2)])
+    }
+
     @Test func walkingBackwardSaysTurnAround() {
         var engine = NavigationEngine(route: sampleRoute())
         _ = engine.update(fix(north: 50, at: 0))

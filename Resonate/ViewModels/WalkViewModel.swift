@@ -32,14 +32,21 @@ final class WalkViewModel {
     private var recentPoses: [(time: Date, position: SIMD3<Double>)] = []
     /// "up" or "down" while the user is on stairs (LiDAR phones), from the last 2 seconds of movement.
     private var climbingDirection: String? {
-        guard let first = recentPoses.first, let last = recentPoses.last,
-              last.time.timeIntervalSince(first.time) >= 1.2 else { return nil }
+        // Only right after stairs were seen: otherwise lifting the phone while walking looks like climbing.
+        guard Date.now.timeIntervalSince(narrator.lastStairsSeen) < 15,
+              let first = recentPoses.first, let last = recentPoses.last,
+              last.time.timeIntervalSince(first.time) >= 1.6 else { return nil }
+        let middle = recentPoses[recentPoses.count / 2]
         let rise = last.position.y - first.position.y
         let moved = last.position - first.position
-        // Steps rise about 17 cm for every 28 cm forward. A ramp or hill is far gentler, and an
-        // elevator rises without moving forward.
         let horizontal = (moved.x * moved.x + moved.z * moved.z).squareRoot()
-        guard abs(rise) >= 0.25, horizontal >= 0.25, abs(rise) / horizontal >= TerrainAnalyzer.stairsMinGrade else { return nil }
+        // Steps rise about 17 cm for every 28 cm forward, steadily: a ramp or hill is far gentler, an
+        // elevator rises without moving forward, and lifting the phone rises all at once.
+        let firstHalf = middle.position.y - first.position.y, secondHalf = last.position.y - middle.position.y
+        let steady = firstHalf * rise > 0 && secondHalf * rise > 0
+            && min(abs(firstHalf), abs(secondHalf)) >= abs(rise) * 0.25
+        guard abs(rise) >= 0.35, horizontal >= 0.5, (TerrainAnalyzer.stairsMinGrade...1.2).contains(abs(rise) / horizontal),
+              steady else { return nil }
         return rise > 0 ? "up" : "down"
     }
 
@@ -122,11 +129,14 @@ final class WalkViewModel {
         if alert == nil, narrator.isOnStairs { return "Hold the railing and take it one step at a time." }
         if let shown { return shown.guidance }
         if navigation?.isWrongWay == true { return "Turn around. The route is behind you." }
-        if let step = navigation?.currentStep, !hasArrived {
-            // How far to the next turn, from where the user is now (not the step's total length).
-            let remaining = distanceToNextManeuver ?? step.distanceMeters
-            return remaining > 0 ? "\(step.instruction). \(DistanceText.short(remaining))." : step.instruction
+        // The turn coming up and how far away it is, so the card matches what the voice says next
+        // (not the turn just made).
+        if let next = navigation?.nextStep, let remaining = distanceToNextManeuver, !hasArrived {
+            let what = next.maneuver == .arrive ? "Destination" : next.instruction
+            return "\(what) in \(DistanceText.short(remaining))."
         }
+        // Not on the route yet: how to start.
+        if let step = navigation?.currentStep, !hasArrived { return step.instruction }
         return "Keep walking. I'll warn you about obstacles."
     }
 
@@ -167,7 +177,9 @@ final class WalkViewModel {
     }
 
     var guidanceIcon: Maneuver {
-        shown?.guidanceIcon ?? navigation?.currentStep?.maneuver ?? .straight
+        if let shown { return shown.guidanceIcon }
+        if let navigation, navigation.distanceToNextManeuver != nil, let next = navigation.nextStep { return next.maneuver }
+        return navigation?.currentStep?.maneuver ?? .straight
     }
 
     // MARK: Running
@@ -200,9 +212,10 @@ final class WalkViewModel {
         for await frame in detection.frames() {
             guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             let now = Date.now
-            // Things that belong together are one (a person with a bag, a cyclist, a group of people).
+            // Things that belong together are one (a person with a bag, a cyclist, a group of people),
+            // and anything that stays put is just an obstacle, so its name doesn't keep changing.
             var grouped = frame
-            grouped.objects = SceneGrouping.group(frame.objects)
+            grouped.objects = SceneGrouping.group(frame.objects).map(ObjectCatalog.forWalking)
             // Each thing is recognized once, then followed by position.
             let tracks = tracker.update(with: grouped, now: now)
             // Only what matters is drawn; boxes keep their identity so they don't flicker.

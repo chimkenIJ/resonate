@@ -53,13 +53,23 @@ nonisolated struct WalkNarrator {
     /// On stairs: after the first warning, stairs, curbs, and unnamed obstacles stay quiet until no stairs
     /// have been seen for `stairsQuietTime`. Climbing tilts the phone, which otherwise keeps re-finding them.
     private var stairsQuietUntil: Date?
+    private var stairsQuietSince: Date?
+    private var lastClimbAt: Date = .distantPast
     static let stairsQuietTime: TimeInterval = 8
+    /// Stairs only keep the quiet going when they're right at the user's feet.
+    static let stairsAtFeet = 1.5
+    /// Without actual climbing, stairs mode ends after this long no matter what the depth sensor sees.
+    static let stairsMaxQuiet: TimeInterval = 45
+    /// When stairs were last seen nearby, so climbing can be told apart from lifting the phone.
+    private(set) var lastStairsSeen: Date = .distantPast
     /// True while climbing stairs (see `stairsQuietUntil`), so the screen can hold still too.
     var isOnStairs: Bool { stairsQuietUntil != nil }
 
     /// The phone is going up or down steps (from its height changing): stay in stairs mode.
     mutating func noteClimbing(now: Date) {
+        if stairsQuietUntil == nil { stairsQuietSince = now }
         stairsQuietUntil = now.addingTimeInterval(Self.stairsQuietTime)
+        lastClimbAt = now
     }
 
     /// - Parameter canSpeak: false while something else is playing; summaries never talk over it.
@@ -70,10 +80,16 @@ nonisolated struct WalkNarrator {
         }
         var outputs: [Output] = []
 
+        if all.contains(where: { $0.category == .stairs && $0.isVisible && $0.isConfirmed && ($0.distance ?? 9) <= 4 }) {
+            lastStairsSeen = now
+        }
         if let until = stairsQuietUntil {
-            if now >= until {
+            let climbing = now.timeIntervalSince(lastClimbAt) < Self.stairsQuietTime
+            let tooLong = now.timeIntervalSince(stairsQuietSince ?? now) >= Self.stairsMaxQuiet && !climbing
+            if now >= until || tooLong {
                 stairsQuietUntil = nil
-            } else if all.contains(where: { $0.category == .stairs && $0.isVisible }) {
+                stairsQuietSince = nil
+            } else if all.contains(where: { $0.category == .stairs && $0.isVisible && ($0.distance ?? 9) <= Self.stairsAtFeet }) {
                 stairsQuietUntil = now.addingTimeInterval(Self.stairsQuietTime)
             }
         }
@@ -85,7 +101,7 @@ nonisolated struct WalkNarrator {
         let fresh = urgent.filter { urgentAnnounced[$0.id] == nil }
         if let first = fresh.min(by: { ($0.distance ?? .infinity) < ($1.distance ?? .infinity) }) {
             outputs.append(.urgent(Self.urgentAlert(for: first, clearance: clearance)))
-            if first.category == .stairs { stairsQuietUntil = now.addingTimeInterval(Self.stairsQuietTime) }
+            if first.category == .stairs { startStairsQuiet(now) }
         }
         for track in urgent { urgentAnnounced[track.id] = now }
 
@@ -108,7 +124,7 @@ nonisolated struct WalkNarrator {
         advice = Self.advice(clearance: clearance, inPath: tracks.filter { $0.inPath && $0.tier >= .important },
                              previous: advice)
         let summary = Self.summary(advice: advice, obstacles: Array(important))
-        if important.contains(where: { $0.category == .stairs }) { stairsQuietUntil = now.addingTimeInterval(Self.stairsQuietTime) }
+        if important.contains(where: { $0.category == .stairs }) { startStairsQuiet(now) }
         let key = ([advice.rawValue] + important.map { "\($0.id)-\($0.direction.rawValue)-\(Self.bucket($0.distance ?? 9))" })
             .joined(separator: "|")
 
@@ -121,6 +137,11 @@ nonisolated struct WalkNarrator {
         }
         outputs.append(.summary(summary, speak: speak, advice: advice, obstacles: important.map(\.id)))
         return outputs
+    }
+
+    private mutating func startStairsQuiet(_ now: Date) {
+        if stairsQuietUntil == nil { stairsQuietSince = now }
+        stairsQuietUntil = now.addingTimeInterval(Self.stairsQuietTime)
     }
 
     /// Things that keep reappearing while climbing stairs: the stairs themselves, edges, and depth "Obstacle"s.

@@ -24,6 +24,9 @@ nonisolated struct NavigationEngine: Sendable {
     /// …but not when it's already this close: back-to-back maneuvers would otherwise get
     /// "In about 10 meters, turn right" immediately followed by "Turn right".
     static let minimumApproachDistance = 15.0
+    /// The next turn isn't announced until the user is this far past the last one, so "In about 65 feet,
+    /// turn left" never plays while they're still making the right turn they were just told about.
+    static let settleDistance = 8.0
     /// A maneuver counts as reached this far before it along the route (a little more with poor GPS)…
     static let reachAhead = 6.0
     /// …or when the user is this close to it in a straight line.
@@ -113,6 +116,11 @@ nonisolated struct NavigationEngine: Sendable {
 
     var currentStep: RouteStep? {
         route.steps.indices.contains(stepIndex) ? route.steps[stepIndex] : nil
+    }
+
+    /// The maneuver coming up: what the user does next.
+    var nextStep: RouteStep? {
+        route.steps.indices.contains(stepIndex + 1) ? route.steps[stepIndex + 1] : nil
     }
 
     mutating func update(_ fix: LocationFix) -> [Event] {
@@ -211,9 +219,11 @@ nonisolated struct NavigationEngine: Sendable {
             return events
         }
 
-        // Approaching the next maneuver (or the destination): only once the user is walking the path that leads to it.
+        // Approaching the next maneuver (or the destination): only once the user is walking the path that
+        // leads to it, and has finished the last turn.
         let next = stepIndex + 1
-        if isOnPath, route.steps.indices.contains(next), !announcedApproach.contains(next) {
+        let settled = progress - stepAlong[min(stepIndex, stepAlong.count - 1)] >= Self.settleDistance
+        if isOnPath, settled, route.steps.indices.contains(next), !announcedApproach.contains(next) {
             let distance = stepAlong[next] - progress
             if distance <= Self.approachDistance, distance >= Self.minimumApproachDistance {
                 announcedApproach.insert(next)

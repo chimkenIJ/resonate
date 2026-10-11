@@ -125,12 +125,48 @@ struct ObstacleTrackerTests {
         }
     }
 
-    @Test func depthObstacleTakesTheRealName() {
+    @Test func outsideAnythingThatStaysPutIsJustAnObstacle() {
+        var tracker = ObstacleTracker()
+        var tracks: [TrackedObstacle] = []
+        // The detector can't decide what this bollard is.
+        let guesses: [(String, ObjectCategory)] = [("Post", .obstacle), ("Toilet", .furniture), ("Seat", .furniture),
+                                                   ("Post", .obstacle), ("Planter", .obstacle), ("Toilet", .furniture)]
+        for (i, guess) in guesses.enumerated() {
+            let seen = ObjectCatalog.forWalking(object(guess.0, guess.1, x: 0.5, distance: 2, lateral: 0))
+            tracks = tracker.update(with: DetectionFrame(objects: [seen], depthSource: .lidar), now: start.addingTimeInterval(Double(i) * 0.1))
+            #expect(tracks.count == 1)
+            #expect(tracks.first?.label == "Obstacle")
+        }
+        #expect(tracks.first?.tier == .important)
+    }
+
+    @Test func thingsThatMoveKeepTheirNames() {
+        for (label, category) in [("Person", ObjectCategory.person), ("People", .person), ("Cyclist", .vehicle),
+                                  ("Vehicle", .vehicle), ("Animal", .obstacle), ("Stairs going up", .stairs), ("Curb drop", .dropOff)] {
+            #expect(ObjectCatalog.forWalking(object(label, category, x: 0.5, distance: 2)).label == label)
+        }
+    }
+
+    @Test func aDepthObstacleTakesARealNameOnlyOnceItsSeenMoreOften() {
         var tracker = ObstacleTracker()
         _ = run(&tracker, [object("Obstacle", .obstacle, x: 0.5, distance: 2, lateral: 0)], frames: 3)
-        let tracks = run(&tracker, [object("Post", .obstacle, x: 0.5, distance: 1.9, lateral: 0)], frames: 1, from: start.addingTimeInterval(0.3))
+        // One "car" guess doesn't rename it…
+        var tracks = run(&tracker, [object("Vehicle", .vehicle, x: 0.5, distance: 1.9, lateral: 0)], frames: 1, from: start.addingTimeInterval(0.3))
         #expect(tracks.count == 1)
-        #expect(tracks.first?.label == "Post")
+        #expect(tracks.first?.label == "Obstacle")
+        // …but a person seen again and again does.
+        tracks = run(&tracker, [object("Person", .person, x: 0.5, distance: 1.9, lateral: 0)], frames: 4, from: start.addingTimeInterval(0.4))
+        #expect(tracks.count == 1)
+        #expect(tracks.first?.label == "Person")
+    }
+
+    @Test func stairsAndAPostAreNeverMerged() {
+        var tracker = ObstacleTracker()
+        let stairs = DetectedObject(label: "Stairs going up", category: .stairs, confidence: 1,
+                                    boundingBox: CGRect(x: 0.1, y: 0.6, width: 0.8, height: 0.16), distanceMeters: 2, lateralMeters: 0)
+        let post = object("Obstacle", .obstacle, x: 0.5, distance: 2, lateral: 0)
+        let tracks = run(&tracker, [stairs, post], frames: 5)
+        #expect(Set(tracks.map(\.label)) == ["Stairs going up", "Obstacle"])
     }
 
     @Test func directionDoesNotFlipOnTheBoundary() {
