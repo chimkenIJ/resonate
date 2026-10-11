@@ -269,11 +269,11 @@ final class WalkViewModel: SceneDescribing {
                     alert = next
                     alertShownAt = now
                     await feedback.deliverUrgent(next)
-                case .summary(let next, let speak, let advice, let obstacles):
+                case .summary(let next, let say, let advice, let obstacles):
                     summary = next
                     summaryAdvice = advice
                     summaryObstacles = obstacles
-                    if speak { await feedback.speakSummary(next) }
+                    if let say { await feedback.speakSummary(say) }
                 case .pulse:
                     feedback.proximityPulse()
                 }

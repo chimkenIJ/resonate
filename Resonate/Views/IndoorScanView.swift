@@ -61,14 +61,6 @@ struct IndoorScanView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let nearby = model.nearbyText {
-                Label(nearby, systemImage: "dot.radiowaves.left.and.right")
-                    .appFont(.body)
-                    .foregroundStyle(Palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityLabel("Also nearby: \(nearby)")
-            }
-
             if let description = model.roomDescription {
                 Text(description)
                     .appFont(.body)
@@ -85,10 +77,9 @@ struct IndoorScanView: View {
             }
 
             // The main job indoors: getting to a door. Always here.
-            PillButton(title: model.isGuiding ? "Stop guiding" : "Find door",
-                       accessibilityHint: model.isGuiding ? "Stops guiding to the door"
-                           : "Guides you to the nearest door, step by step, and says how to open it") {
-                Task { await model.toggleFindDoor() }
+            PillButton(title: "Find door",
+                       accessibilityHint: "Says where the doors are, and how to open a closed door right in front of you") {
+                Task { await model.findDoor() }
             }
 
             HStack(spacing: 10) {

@@ -190,7 +190,8 @@ struct WalkNarratorTests {
     }
 
     private func summaries(_ outputs: [WalkNarrator.Output]) -> [(ObstacleAlert, Bool)] {
-        outputs.compactMap { if case .summary(let alert, let speak, _, _) = $0 { (alert, speak) } else { nil } }
+        // What was said when something was said, otherwise what's on screen.
+        outputs.compactMap { if case .summary(let alert, let say, _, _) = $0 { (say ?? alert, say != nil) } else { nil } }
     }
 
     @Test func reportsAfterLookingForTwoSeconds() {
@@ -210,6 +211,22 @@ struct WalkNarratorTests {
         _ = narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start)
         #expect(summaries(narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start.addingTimeInterval(5))).first?.1 == true)
         #expect(summaries(narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start.addingTimeInterval(10))).first?.1 == false)
+    }
+
+    @Test func onlyNewThingsAreSaid() {
+        var narrator = WalkNarrator()
+        let person = track("Person", .person, distance: 3, lateral: 1.5, tier: .important)
+        _ = narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start)
+        #expect(summaries(narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start.addingTimeInterval(2))).first?.0.spokenText
+            == "Path clear. Person ahead, slightly right, 10 feet.")
+        // Still there a minute later: nothing more about it, and no "Path clear." reminders.
+        for t in stride(from: 4.0, through: 60, by: 2) {
+            #expect(summaries(narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start.addingTimeInterval(t))).first?.1 == false)
+        }
+        // A bench appears: only the bench.
+        let bench = track("Bench", .furniture, distance: 2.5, lateral: -1.5, tier: .important)
+        let said = summaries(narrator.update(tracks: [person, bench], clearance: nil, canSpeak: true, now: start.addingTimeInterval(62)))
+        #expect(said.first?.0.spokenText == "Bench on your left, 10 feet.")
     }
 
     @Test func neverTalksOverOtherSpeech() {

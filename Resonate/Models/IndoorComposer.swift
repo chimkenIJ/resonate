@@ -61,6 +61,8 @@ nonisolated enum IndoorComposer {
         var miniMap: [MiniMapItem]
         /// Something right in front of the user (stairs a little sooner): interrupt.
         var alert: ObstacleAlert?
+        /// Where that is (world X/Z), so the same thing isn't called out twice under another name.
+        var alertPosition: SIMD2<Double>?
         /// The short spoken update, in pre-recorded pieces…
         var summary: [String]
         /// …and a key that changes only when the update meaningfully changes, not with every step.
@@ -73,6 +75,9 @@ nonisolated enum IndoorComposer {
         var roomSize: (length: Double, width: Double)?
         /// Things close by (not walls or doors), nearest first, for the card.
         var nearby: [Placed] = []
+        /// Everything it was composed from (world X/Z) and where the user stood, for planning a route.
+        var elements: [RoomElement] = []
+        var pose = FloorPose(position: .zero, forward: SIMD2(1, 0))
     }
 
     static let stepLength = 0.7
@@ -81,104 +86,73 @@ nonisolated enum IndoorComposer {
     static let mapSpan = 6.0
     /// "Stop" only this close (about one step).
     static let stopDistance = 0.8
-    /// Things in the walking path within this distance are mentioned.
-    static let pathRange = 2.5
     /// Stairs get a warning a little sooner.
     static let stairsWarning = 2.0
     static let doorRange = 10.0
-    /// Things within this distance are "nearby" and worth a mention.
-    static let nearbyRange = 3.0
     /// Step counts stop here (about 30 feet); farther is still said as this many.
     static let maxSteps = 15
 
     static let closedDoorGuidance = "The door is closed. Find the handle to open it."
 
+    /// What's in front is said within this distance…
+    static let frontRange = 4.0
+    /// …and this many degrees either side of where the user is going.
+    static let frontAngle = 60.0
+    /// Doors in front are mentioned a little farther out.
+    static let frontDoorRange = 6.0
+    /// At most this many things in one update.
+    static let maxMentioned = 3
+
+    /// Describes what's in front, left to right ("Couch 3 steps ahead, on your left. Table 2 steps
+    /// straight ahead."). Never says where to go: there's no one right way through a room.
     static func compose(_ elements: [RoomElement], pose: FloorPose) -> Result {
         let placed = elements.map { place($0, pose: pose) }
-        let block = placed.filter { inCorridor($0, within: pathRange) }.min { $0.distance < $1.distance }
         let doors = placed.filter { isDoor($0) && $0.distance <= doorRange }.sorted(by: doorOrder)
-        let doorAhead = doors.first { abs($0.bearing) <= 100 }
-        // What's around: things (not walls or doors) close by in front or to the side, nearest first.
-        let around = placed
-            .filter { $0.element.kind == .object && $0.distance <= nearbyRange && abs($0.bearing) <= 100 && $0.element.id != block?.element.id }
-            .sorted { $0.distance < $1.distance }
-
-        var headline: String
-        var summary: [String]
-        var guidance: [String] = []
-        var icon = Maneuver.straight
-        var key: [String]
-        // At most two things in one update: what to do first, then what matters most and what else is close.
-        // Keys say what and where, not which scanned element, since the scan renames things as it improves.
-        let others: ArraySlice<Placed>
-
-        if let block {
-            let sentence = describe(block)
-            headline = sentence.joined(separator: " ")
-            if isClosedDoor(block) {
-                // The door is where they're going: say it's there, then how to open it.
-                summary = sentence + [closedDoorGuidance]
-                guidance.append(closedDoorGuidance)
-            } else if block.element.kind == .wall {
-                summary = ["Turn left or right."] + sentence
-                guidance.append("Wall ahead. Turn left or right.")
-            } else {
-                let pass = passSide(block)
-                summary = [pass.text] + sentence
-                guidance.append(block.distance <= stopDistance ? "Stop. \(pass.text)" : pass.text)
-                icon = pass.icon
+        // Things and doors in front; a wall only when it's close and straight ahead (walls run alongside everywhere).
+        let front = placed.filter { item in
+            guard abs(item.bearing) <= frontAngle else { return false }
+            switch item.element.kind {
+            case .wall: return item.distance <= 2.5 && abs(item.bearing) <= 20
+            case .object: return item.distance <= frontRange
+            case .door, .opening: return item.distance <= frontDoorRange
             }
-            key = ["block-\(block.element.label)-\(side(block.bearing))-\(bucket(block.distance))"]
-            others = around.prefix(1)
-        } else if let door = doorAhead {
-            let sentence = describe(door)
-            headline = sentence.joined(separator: " ")
-            summary = ["Clear ahead."] + sentence + (isClosedDoor(door) ? ["It's closed."] : [])
-            guidance.append("Walk straight.")
-            key = ["door-\(side(door.bearing))-\(bucket(door.distance))"]
-            others = around.prefix(1)
-        } else if let first = around.first {
-            headline = describe(first).joined(separator: " ")
-            summary = ["Clear ahead."]
-            guidance.append("Walk straight.")
-            key = ["clear"]
-            others = around.prefix(2)
-        } else {
-            headline = "The way ahead is clear."
-            summary = ["Clear ahead."]
-            guidance.append("Walk straight.")
-            key = ["clear"]
-            others = []
         }
-        // Nearby things are mentioned again only if they change or move to another side, not as you step closer.
-        for item in others {
-            summary += describe(item)
-            key.append("near-\(item.element.label)-\(side(item.bearing))")
-        }
-        if let side = wallAlongside(placed) {
-            guidance.append("Wall stays on your \(side).")
-        }
+        // The nearest few, said left to right.
+        let mentioned = Array(front.sorted { $0.distance < $1.distance }.prefix(maxMentioned).sorted { $0.bearing < $1.bearing })
 
-        var relevant = Set(placed.filter { item in
+        let sentences = mentioned.map { describe($0) + (isClosedDoor($0) ? ["It's closed."] : []) }
+        let summary = sentences.isEmpty ? ["Clear ahead."] : sentences.flatMap { $0 }
+        // Said again only when what's in front, or which side it's on, changes, not with every step closer.
+        let key = mentioned.isEmpty ? "clear" : mentioned.map { "\($0.element.label)-\(side($0.bearing))" }.joined(separator: "|")
+        let headline = switch mentioned.count {
+        case 0: "Nothing in front of you."
+        case 1: sentences[0].joined(separator: " ")
+        default: "Left to right: " + mentioned.map(\.element.label).joined(separator: ", ") + "."
+        }
+        let stop = alert(for: placed)
+        let stopItem = stopTarget(placed)
+
+        var relevant = Set(mentioned.map(\.element.id))
+        relevant.formUnion(placed.filter { item in
             (isDoor(item) && item.distance <= 8 && abs(item.bearing) <= 100)
-                || inCorridor(item, within: 4)
-                || (item.element.kind == .object && item.distance <= 4 && abs(item.bearing) <= 70)
                 || (item.element.category == .person && item.distance <= 5)
         }.map(\.element.id))
-        if let block { relevant.insert(block.element.id) }
 
         return Result(
             headline: headline,
-            guidance: guidance.joined(separator: " "),
-            guidanceIcon: icon,
+            guidance: sentences.isEmpty ? "Clear ahead." : sentences.map { $0.joined(separator: " ") }.joined(separator: " "),
+            guidanceIcon: .straight,
             miniMap: placed.compactMap(mapItem),
-            alert: alert(for: placed),
+            alert: stop,
+            alertPosition: stopItem.map { worldCenter(of: $0.element) },
             summary: summary,
-            summaryKey: key.joined(separator: "|"),
+            summaryKey: key,
             doors: doors,
             relevant: relevant,
             roomSize: roomSize(elements),
-            nearby: Array(around.prefix(3))
+            nearby: mentioned,
+            elements: elements,
+            pose: pose
         )
     }
 
@@ -238,55 +212,31 @@ nonisolated enum IndoorComposer {
         return a.distance < b.distance
     }
 
-    /// A wall roughly parallel to the walking direction, close beside the user.
-    private static func wallAlongside(_ placed: [Placed]) -> String? {
-        let candidates = placed.filter { item in
-            guard item.element.kind == .wall, item.points.count == 2, item.distance <= 1.6,
-                  abs(item.nearest.y) >= 0.2 else { return false }
-            let direction = item.points[1] - item.points[0]
-            let angle = abs(atan2(direction.y, direction.x) * 180 / .pi)
-            return angle < 30 || angle > 150
-        }
-        guard let wall = candidates.min(by: { $0.distance < $1.distance }) else { return nil }
-        return wall.nearest.y < 0 ? "left" : "right"
-    }
 
-    /// Which way to step around something: toward the side with more room in the corridor.
-    private static func passSide(_ item: Placed) -> (text: String, icon: Maneuver) {
-        if isStep(item) { return ("Watch the step.", .straight) }
-        return item.nearest.y <= 0 ? ("Step right to pass.", .slightRight) : ("Step left to pass.", .slightLeft)
-    }
 
-    /// A single step up or down (from the depth sensor), not a flight of stairs.
-    private static func isStep(_ item: Placed) -> Bool {
-        (item.element.category == .stairs || item.element.category == .dropOff) && !isStairs(item)
-    }
 
     private static func isStairs(_ item: Placed) -> Bool {
         item.element.category == .stairs && item.element.label.hasPrefix("Stairs")
     }
 
-    /// Something right in front: "Stop. Step right to pass. Chair right in front of you."
-    /// Stairs a little sooner. Doors never: walking up to a door is the point.
+    /// Something right in front: "Stop. Chair right in front of you." Stairs a little sooner, with
+    /// "Find the railing." Doors never: walking up to a door is the point.
     private static func alert(for placed: [Placed]) -> ObstacleAlert? {
-        let stairs = placed.filter { isStairs($0) && inCorridor($0, within: stairsWarning) }
-            .min { $0.distance < $1.distance }
-        let close = placed.filter { !isDoor($0) && inCorridor($0, within: stopDistance) }.min { $0.distance < $1.distance }
-        guard let item = stairs ?? close else { return nil }
-        let guidance: String
-        if isStairs(item) {
-            guidance = "Find the railing."
-        } else if item.element.kind == .wall {
-            guidance = "Turn left or right."
-        } else {
-            guidance = passSide(item).text
-        }
+        guard let item = stopTarget(placed) else { return nil }
+        let railing = isStairs(item) ? ["Find the railing."] : []
         let sentence = describe(item)
         // Repeats are by kind of danger, not scanned element (the scan renames things as it improves).
         let kind = isStairs(item) ? "stairs" : item.element.kind == .wall ? "wall" : item.element.category.rawValue
-        return ObstacleAlert(severity: .stop, headline: "Stop. \(sentence.joined(separator: " "))", guidance: guidance,
-                             guidanceIcon: item.element.kind == .wall ? .straight : passSide(item).icon,
-                             dedupeKey: kind, fragments: ["Stop.", guidance] + sentence)
+        return ObstacleAlert(severity: .stop, headline: "Stop. \(sentence.joined(separator: " "))", guidance: railing.first ?? "",
+                             guidanceIcon: .straight, dedupeKey: kind, fragments: ["Stop."] + sentence + railing)
+    }
+
+    /// What a "Stop" would be about: stairs a little ahead, or anything (not a door) right in front.
+    private static func stopTarget(_ placed: [Placed]) -> Placed? {
+        let stairs = placed.filter { isStairs($0) && inCorridor($0, within: stairsWarning) }
+            .min { $0.distance < $1.distance }
+        let close = placed.filter { !isDoor($0) && inCorridor($0, within: stopDistance) }.min { $0.distance < $1.distance }
+        return stairs ?? close
     }
 
     /// Rough length and width of the room from its walls, measured along the longest wall.
@@ -340,16 +290,6 @@ nonisolated enum IndoorComposer {
         distance <= stopDistance ? ["right in front of you."] : [steps(distance), "\(phrase(for: bearing))."]
     }
 
-    /// How to turn toward something at `bearing` (degrees, positive = right).
-    static func turn(toward bearing: Double) -> (text: String, icon: Maneuver) {
-        let side = bearing < 0 ? "left" : "right"
-        switch abs(bearing) {
-        case ...12: return ("Walk straight.", .straight)
-        case ...45: return ("Turn slightly \(side).", bearing < 0 ? .slightLeft : .slightRight)
-        case ...130: return ("Turn \(side).", bearing < 0 ? .left : .right)
-        default: return ("Turn around.", .uTurn)
-        }
-    }
 
     /// Distance bands; moving into a closer one is worth mentioning again.
     private static func bucket(_ meters: Double) -> Int {

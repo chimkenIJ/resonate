@@ -1,8 +1,13 @@
 import Foundation
 import Observation
 
-/// Getting around indoors: what's in the way, where the doors are, and guidance to a door.
-/// Quiet unless something changed (see IndoorNavigator).
+/// Getting around indoors: what's in front, left to right, and where the doors are. It never says
+/// where to go.
+/// Starts by mapping the room: the user stands and turns in a circle, and nothing about obstacles is
+/// said, buzzed, or outlined until it's done. After that, updates, "Stop" alerts, and routes come from
+/// the room map together with what the camera sees now (IndoorMap), measured from where the user is
+/// going: the way they're walking, or where the phone faces when they stand still. Quiet unless
+/// something changed (see IndoorNavigator).
 @Observable
 final class IndoorScanViewModel {
     private(set) var snapshot: IndoorSnapshot?
@@ -16,7 +21,17 @@ final class IndoorScanViewModel {
     private let describer: any SceneDescriptionServicing
     private let feedback: FeedbackCenter
     private var navigator = IndoorNavigator()
+    private var map = IndoorMap()
     private var saidDarkTip = false
+    /// The first look around, before the map is good enough to guide with.
+    private(set) var isMapping = true
+    private var mappingStarted: Date?
+    private var saidKeepTurning = false
+
+    /// Mapping is done once the user has faced this much of a full circle…
+    static let mappedCoverage = 0.8
+    /// …or after this long, whatever has been mapped.
+    static let mappingTimeout: TimeInterval = 30
 
     init(services: AppServices, feedback: FeedbackCenter) {
         self.scanner = services.indoorScan
@@ -27,30 +42,25 @@ final class IndoorScanViewModel {
     var isSupported: Bool { scanner.isSupported }
     var previewSource: CameraPreviewSource { scanner.previewSource }
     var unsupportedMessage: String { AppError.unsupportedDevice(feature: "Scanning indoors").spokenMessage }
-    var isGuiding: Bool { navigator.isGuiding }
-
     var headline: String {
         if !cameraAvailable { return "Camera is off." }
-        return navigator.guideHeadline ?? scene?.headline ?? "Sweep the phone slowly left and right."
+        if isMapping { return "Mapping the room." }
+        return scene?.headline ?? "Mapping the room."
     }
-    var guidance: String { navigator.guideGuidance ?? scene?.guidance ?? "I'm finding walls, doors, and furniture." }
-    var guidanceIcon: Maneuver { navigator.isGuiding ? navigator.guideIcon : (scene?.guidanceIcon ?? .straight) }
+    /// What's in front, left to right.
+    var guidance: String {
+        if isMapping { return "Turn slowly in a full circle. \(Int(map.coverage * 100))% done." }
+        return scene?.guidance ?? "I'm finding walls, doors, and furniture."
+    }
+    var guidanceIcon: Maneuver { isMapping ? .uTurn : .straight }
     var miniMap: [MiniMapItem] { scene?.miniMap ?? [] }
-
-    /// Other things close by, for the card: "Table 3 steps to your right. Plant 2 steps ahead, on your left."
-    var nearbyText: String? {
-        guard !navigator.isGuiding, let scene else { return nil }
-        let lines = scene.nearby.map { IndoorComposer.describe($0).joined(separator: " ") }.filter { $0 != headline }
-        return lines.isEmpty ? nil : lines.prefix(2).joined(separator: " ")
-    }
     var coaching: String? { snapshot?.coaching }
 
     /// Only what matters is outlined: doors, things in the path, people nearby, and the door being guided to.
+    /// Nothing while mapping.
     var overlayObjects: [DetectedObject] {
-        guard let snapshot, let scene else { return [] }
-        var shown = scene.relevant
-        if let target = navigator.guideTarget { shown.insert(target) }
-        return snapshot.objects.filter { shown.contains($0.id) }
+        guard !isMapping, let snapshot, let scene else { return [] }
+        return snapshot.objects.filter { scene.relevant.contains($0.id) }
     }
 
     func run() async {
@@ -66,15 +76,30 @@ final class IndoorScanViewModel {
             await feedback.announce(AppError.permissionDenied(.camera).spokenMessage, priority: .info)
             return
         }
-        await feedback.announce("Indoors. Sweep the phone slowly left and right once, then hold it ahead. "
-            + "I'll tell you about doors and anything in your way.", priority: .navigation)
+        await feedback.announce("Indoors. Stand still, hold the phone up, and turn slowly in a full circle, so I can map the room.",
+                                priority: .navigation)
 
         for await next in scanner.snapshots() {
             guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+            let now = Date.now
             snapshot = next
-            let scene = IndoorComposer.compose(next.elements, pose: next.pose)
+            // The room map plus what the camera sees now (it feeds the map), from where the user is going.
+            map.update(next.elements, live: next.live, pose: next.pose, now: now)
+            let scene = IndoorComposer.compose(map.elements, pose: map.heading(next.pose))
             self.scene = scene
             guard !isDescribing else { continue }
+
+            if isMapping {
+                let elapsed = now.timeIntervalSince(mappingStarted ?? now)
+                if mappingStarted == nil { mappingStarted = now }
+                if map.coverage >= Self.mappedCoverage || elapsed >= Self.mappingTimeout {
+                    isMapping = false
+                    await feedback.say(["Room mapped."])
+                } else if !saidKeepTurning, elapsed >= 12, map.coverage < 0.5 {
+                    saidKeepTurning = true
+                    await feedback.say(["Keep turning slowly."])
+                }
+            }
 
             // Scanning tips stay on screen; only "too dark" is worth saying, once.
             if let tip = next.coaching, tip.contains("dark"), !saidDarkTip {
@@ -82,7 +107,9 @@ final class IndoorScanViewModel {
                 await feedback.announce(tip, priority: .info)
             }
 
-            for output in navigator.update(scene, canSpeak: !feedback.isSpeaking, now: .now) {
+            // Nothing about obstacles until the map is ready.
+            guard !isMapping else { continue }
+            for output in navigator.update(scene, canSpeak: !feedback.isSpeaking, now: now) {
                 await handle(output)
             }
         }
@@ -94,8 +121,6 @@ final class IndoorScanViewModel {
             await feedback.deliverUrgent(alert)
         case .say(let fragments):
             await feedback.say(fragments)
-        case .aligned:
-            feedback.proximityPulse()
         case .describeDoor, .lookForDoor:
             // The camera description says where a door is, or how to open the one in front.
             await describe(.door, intro: nil, failure: nil)
@@ -104,29 +129,24 @@ final class IndoorScanViewModel {
 
     // MARK: Actions
 
-    /// Starts (or stops) guidance to the nearest door.
-    func toggleFindDoor() async {
-        if navigator.isGuiding {
-            navigator.stopGuiding()
-            feedback.stopSpeech()
-            await feedback.say(["Stopped guiding."])
-            return
-        }
+    /// Where the doors are (ends mapping early if it's still going).
+    func findDoor() async {
         guard let scene else {
-            await feedback.say(["I'm still scanning.", "Sweep the phone slowly left and right."])
+            await feedback.say(["I'm still scanning.", "Turn slowly in a full circle."])
             return
         }
+        isMapping = false
         feedback.stopSpeech()
-        for output in navigator.startGuiding(scene, now: .now) {
+        for output in IndoorNavigator.findDoor(scene) {
             await handle(output)
         }
     }
 
     func repeatLast() async {
-        if let roomDescription {
+        if isMapping {
+            await feedback.say(["Keep turning slowly."])
+        } else if let roomDescription {
             await feedback.announce(roomDescription, priority: .snapshot)
-        } else if navigator.isGuiding, let said = navigator.lastGuide {
-            await feedback.say(said, priority: .info)
         } else if let scene {
             await feedback.say(scene.summary, priority: .info)
         } else {

@@ -1,69 +1,48 @@
 import Foundation
+import simd
 
-/// Decides what to say indoors, so the user hears what helps them get around and nothing else.
-/// Like walking outside: what to do first, then what's around.
-/// - "Stop" only for something right in front of them, once per kind of danger.
-/// - A short update only when the situation changes ("Clear ahead. Door 5 steps ahead, on your left."),
-///   at most every `summaryInterval` seconds, and never over other speech.
+/// Decides what to say indoors. It describes what's in front, left to right, and never says where to
+/// go: there's no one right way through a room, and only the user knows where they're headed.
+/// - "Stop" only for something right in front of them, once: not again for the same kind of danger
+///   within `urgentCooldown`, or for the same spot under another name.
+/// - What's in front ("Couch 3 steps ahead, on your left. Table 2 steps straight ahead."), but only
+///   what hasn't been said: something already mentioned isn't repeated while it's still around, or
+///   until it's been out of sight for `repeatAfter`. The same spot counts as the same thing, whatever
+///   the scan calls it this time. At most every `summaryInterval` seconds, never over other speech.
 /// - The room's size and door count once, when it's known.
-/// - Guiding to a door: which way to turn, a tap when facing it, and when they've reached it.
+/// - "Find door": where the doors are; how to open a closed one right in front.
 /// Pure logic, easy to test.
 nonisolated struct IndoorNavigator {
     nonisolated enum Output: Equatable, Sendable {
         case urgent(ObstacleAlert)
         /// Spoken update, in pre-recorded pieces where possible.
         case say([String])
-        /// Facing the door being guided to: one light tap.
-        case aligned
-        /// Reached a closed door: describe how to open it (handle, push or pull).
+        /// At a closed door: describe how to open it (handle, push or pull).
         case describeDoor
         /// No door mapped yet: ask the camera description where one is.
         case lookForDoor
     }
 
-    nonisolated enum Guide: Equatable, Sendable {
-        /// No door found yet; waiting for one to come into view.
-        case searching(since: Date)
-        /// Guiding to a door, remembered by identifier and where it is.
-        case toDoor(id: UUID, center: SIMD2<Double>)
-    }
-
     static let summaryInterval: TimeInterval = 3
     /// The same kind of danger doesn't get another "Stop" until it's been gone this long.
     static let urgentCooldown: TimeInterval = 8
-    /// Guidance repeats at most this often, and only when the turn or the distance changed.
-    static let guideInterval: TimeInterval = 3
-    /// Within this distance the user is at the door.
-    static let arriveDistance = 0.9
-    /// Facing the door within this many degrees: a tap.
-    static let alignedBearing = 10.0
-    /// Still no door after this long: ask the camera description.
-    static let searchTimeout: TimeInterval = 6
+    /// A closed door this close is "the door in front": say how to open it.
+    static let atDoorDistance = 1.2
+    /// "Find door" mentions at most this many.
+    static let maxDoors = 2
+    /// Mentioned things come up again only after being out of sight this long.
+    static let repeatAfter: TimeInterval = 30
+    /// Within this distance (world), it's the same thing.
+    static let samePlace = 0.6
 
-    private(set) var guide: Guide?
     private var startedAt: Date?
-    private var lastSummaryKey: String?
     private var lastSummaryAt: Date = .distantPast
     private var urgentSaid: [String: Date] = [:]
-    private var guideSaidTurn: String?
-    private var guideSaidSteps = Int.max
-    private var guideSaidAt: Date = .distantPast
-    private var isAligned = false
-    private var askedCamera = false
+    /// Things already said (world X/Z), and when each was last in front of the user.
+    private var mentioned: [(center: SIMD2<Double>, seen: Date)] = []
+    /// Spots already called out with "Stop".
+    private var stopped: [(center: SIMD2<Double>, seen: Date)] = []
     private(set) var overviewSaid = false
-
-    /// What the screen shows while guiding.
-    private(set) var guideHeadline: String?
-    private(set) var guideGuidance: String?
-    private(set) var guideIcon: Maneuver = .straight
-    /// The last thing said while guiding, for "Repeat".
-    private(set) var lastGuide: [String]?
-
-    var isGuiding: Bool { guide != nil }
-    var guideTarget: UUID? {
-        if case .toDoor(let id, _) = guide { return id }
-        return nil
-    }
 
     mutating func update(_ scene: IndoorComposer.Result, canSpeak: Bool, now: Date) -> [Output] {
         if startedAt == nil {
@@ -72,20 +51,25 @@ nonisolated struct IndoorNavigator {
         }
         var outputs: [Output] = []
 
-        // "Stop": once per thing, again only after it's been gone a while.
+        mentioned.removeAll { now.timeIntervalSince($0.seen) > Self.repeatAfter }
+        stopped.removeAll { now.timeIntervalSince($0.seen) > Self.urgentCooldown }
         urgentSaid = urgentSaid.filter { now.timeIntervalSince($0.value) < Self.urgentCooldown }
+
+        // "Stop": once per kind of danger and per spot, again only after it's been gone a while.
         if let alert = scene.alert {
-            if urgentSaid[alert.dedupeKey] == nil {
+            let spot = scene.alertPosition
+            let sameSpot = spot.flatMap { Self.index(near: $0, in: stopped) }
+            if urgentSaid[alert.dedupeKey] == nil, sameSpot == nil {
                 outputs.append(.urgent(alert))
-                // The alert said it; the next update shouldn't repeat it.
-                lastSummaryKey = scene.summaryKey
-                lastSummaryAt = now
+                if let spot {
+                    stopped.append((spot, now))
+                    // It's been said; the next update shouldn't mention it again.
+                    if Self.index(near: spot, in: mentioned) == nil { mentioned.append((spot, now)) }
+                }
             }
             urgentSaid[alert.dedupeKey] = now
+            if let index = sameSpot { stopped[index].seen = now }
         }
-
-        // Guiding replaces the regular updates.
-        if guide != nil { return outputs + updateGuide(scene, now: now) }
 
         // Once: how big the room is and how many doors.
         if !overviewSaid, canSpeak, let size = scene.roomSize, now.timeIntervalSince(startedAt ?? now) >= 4 {
@@ -94,124 +78,40 @@ nonisolated struct IndoorNavigator {
             return outputs + [.say([Self.overview(size: size, doors: scene.doors.count)])]
         }
 
-        guard canSpeak, scene.summaryKey != lastSummaryKey, now.timeIntervalSince(lastSummaryAt) >= Self.summaryInterval
-        else { return outputs }
-        lastSummaryKey = scene.summaryKey
-        lastSummaryAt = now
-        return outputs + [.say(scene.summary)]
-    }
-
-    // MARK: Guiding to a door
-
-    mutating func startGuiding(_ scene: IndoorComposer.Result, now: Date) -> [Output] {
-        resetGuide()
-        guard let door = scene.doors.first else {
-            guide = .searching(since: now)
-            guideHeadline = "Looking for a door."
-            guideGuidance = "Turn slowly in a circle."
-            guideIcon = .uTurn
-            return [.say(remember(["I haven't found a door yet.", "Turn slowly, and I'll tell you when I see one."]))]
-        }
-        guide = .toDoor(id: door.element.id, center: IndoorComposer.worldCenter(of: door.element))
-        return guideTo(door, now: now, force: true)
-    }
-
-    mutating func stopGuiding() {
-        resetGuide()
-    }
-
-    private mutating func resetGuide() {
-        guide = nil
-        guideHeadline = nil
-        guideGuidance = nil
-        guideIcon = .straight
-        guideSaidTurn = nil
-        guideSaidSteps = .max
-        guideSaidAt = .distantPast
-        isAligned = false
-        askedCamera = false
-        lastGuide = nil
-    }
-
-    private mutating func updateGuide(_ scene: IndoorComposer.Result, now: Date) -> [Output] {
-        switch guide {
-        case .searching(let since):
-            if let door = scene.doors.first {
-                guide = .toDoor(id: door.element.id, center: IndoorComposer.worldCenter(of: door.element))
-                return [.say(remember(["Found a door."]))] + guideTo(door, now: now, force: true)
-            }
-            if !askedCamera, now.timeIntervalSince(since) >= Self.searchTimeout {
-                askedCamera = true
-                return [.lookForDoor]
-            }
-            return []
-        case .toDoor(let id, let center):
-            // Same door by identifier, or whatever door is now where it was (identifiers can change as the scan improves).
-            let door = scene.doors.first { $0.element.id == id }
-                ?? scene.doors.first { length(IndoorComposer.worldCenter(of: $0.element) - center) < 1 }
-            guard let door else {
-                guide = .searching(since: now)
-                askedCamera = false
-                guideHeadline = "Looking for the door."
-                guideGuidance = "Turn slowly in a circle."
-                guideIcon = .uTurn
-                return [.say(remember(["I lost the door.", "Turn slowly, and I'll tell you when I see one."]))]
-            }
-            guide = .toDoor(id: door.element.id, center: IndoorComposer.worldCenter(of: door.element))
-            return guideTo(door, now: now, force: false)
-        case nil:
-            return []
-        }
-    }
-
-    private mutating func guideTo(_ door: IndoorComposer.Placed, now: Date, force: Bool) -> [Output] {
-        // Aim for the middle of the door, not its nearest edge.
-        let middle = IndoorComposer.center(of: door)
-        let distance = length(middle)
-        let bearing = atan2(middle.y, middle.x) * 180 / .pi
-        let name = door.element.label
-
-        if distance <= Self.arriveDistance {
-            let closed = IndoorComposer.isClosedDoor(door)
-            let said: [String]
-            if door.element.kind == .opening {
-                said = ["You're at the doorway.", "Walk straight through."]
-            } else if closed {
-                said = ["You're at the door.", IndoorComposer.closedDoorGuidance]
+        // What's in front that hasn't been said. Anything already said stays quiet while it's still there.
+        var fresh: [IndoorComposer.Placed] = []
+        for item in scene.nearby {
+            let center = IndoorComposer.worldCenter(of: item.element)
+            if let index = Self.index(near: center, in: mentioned) {
+                mentioned[index].seen = now
             } else {
-                said = ["You're at the door.", "It's open."]
+                fresh.append(item)
             }
-            resetGuide()
-            lastGuide = said
-            return [.say(said)] + (closed ? [.describeDoor] : [])
         }
-
-        let place = IndoorComposer.place(distance: distance, bearing: bearing)
-        let turn = IndoorComposer.turn(toward: bearing)
-        guideHeadline = ([name] + place).joined(separator: " ")
-        guideGuidance = turn.text
-        guideIcon = turn.icon
-
-        var outputs: [Output] = []
-        // A tap when turning to face the door (with a little hysteresis so it doesn't buzz on the edge).
-        let facing = abs(bearing) <= (isAligned ? Self.alignedBearing * 1.8 : Self.alignedBearing)
-        if facing && !isAligned { outputs.append(.aligned) }
-        isAligned = facing
-
-        let steps = Int((distance / IndoorComposer.stepLength).rounded())
-        let changed = turn.text != guideSaidTurn || steps <= guideSaidSteps - 3
-        if force || (changed && now.timeIntervalSince(guideSaidAt) >= Self.guideInterval) {
-            guideSaidTurn = turn.text
-            guideSaidSteps = steps
-            guideSaidAt = now
-            outputs.append(.say(remember([turn.text, name] + place)))
-        }
-        return outputs
+        guard canSpeak, !fresh.isEmpty, now.timeIntervalSince(lastSummaryAt) >= Self.summaryInterval else { return outputs }
+        lastSummaryAt = now
+        mentioned += fresh.map { (IndoorComposer.worldCenter(of: $0.element), now) }
+        let said = fresh.flatMap { IndoorComposer.describe($0) + (IndoorComposer.isClosedDoor($0) ? ["It's closed."] : []) }
+        return outputs + [.say(said)]
     }
 
-    private mutating func remember(_ said: [String]) -> [String] {
-        lastGuide = said
-        return said
+    private static func index(near point: SIMD2<Double>, in list: [(center: SIMD2<Double>, seen: Date)]) -> Int? {
+        list.indices.first { simd_distance(list[$0].center, point) <= samePlace }
+    }
+
+    /// "Find door": where the doors are, best first. Right at a closed one, how to open it. None mapped:
+    /// ask the camera description to look for one.
+    static func findDoor(_ scene: IndoorComposer.Result) -> [Output] {
+        guard let first = scene.doors.first else {
+            return [.say(["I haven't found a door yet."]), .lookForDoor]
+        }
+        if IndoorComposer.isClosedDoor(first), first.distance <= atDoorDistance {
+            return [.say(IndoorComposer.describe(first) + [IndoorComposer.closedDoorGuidance]), .describeDoor]
+        }
+        let doors = scene.doors.prefix(maxDoors).flatMap { door in
+            IndoorComposer.describe(door) + (IndoorComposer.isClosedDoor(door) ? ["It's closed."] : [])
+        }
+        return [.say(doors)]
     }
 
     /// "This room is about 20 by 15 feet, with 2 doors."
@@ -225,6 +125,4 @@ nonisolated struct IndoorNavigator {
         let room = "This room is about \(feet(size.length)) by \(feet(size.width)) feet"
         return doors == 0 ? "\(room). \(doorText)" : "\(room), \(doorText)"
     }
-
-    private func length(_ v: SIMD2<Double>) -> Double { (v * v).sum().squareRoot() }
 }

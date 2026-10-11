@@ -15,6 +15,8 @@ nonisolated struct MiniMapItem: Identifiable, Hashable, Sendable {
 nonisolated struct IndoorSnapshot: Sendable {
     /// Walls, doors, furniture, and stairs from the scan, plus people (tracked, so each is one element).
     var elements: [RoomElement]
+    /// Which of `elements` the camera or depth sensor found (not the room scan); IndoorMap remembers these.
+    var live: Set<UUID> = []
     var pose: FloorPose
     /// Boxes for the camera view, with the same identifiers as `elements`.
     var objects: [DetectedObject]

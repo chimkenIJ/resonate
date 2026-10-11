@@ -40,7 +40,7 @@ struct SpeechPhrasesTests {
         #expect(checked > 1000)
     }
 
-    /// Every indoor update, alert, and door guidance line can be played from pre-recorded pieces.
+    /// Every indoor update, alert, and "Find door" answer can be played from pre-recorded pieces.
     @Test func everyIndoorUpdateIsPrerecorded() throws {
         let pose = FloorPose(position: .zero, forward: SIMD2(0, -1))
         let labels = ["Chair", "Table", "Stairs", "Couch", "Cabinet", "Person", "People", "Wall", "Door", "Doorway",
@@ -57,9 +57,8 @@ struct SpeechPhrasesTests {
                                          footprint: [SIMD2(right - 0.2, -ahead), SIMD2(right + 0.2, -ahead), SIMD2(right + 0.2, -ahead - 0.4), SIMD2(right - 0.2, -ahead - 0.4)])
                     }
                     let scene = IndoorComposer.compose([element], pose: pose)
-                    var navigator = IndoorNavigator()
                     var pieces = scene.summary + (scene.alert?.fragments ?? [])
-                    for output in navigator.startGuiding(scene, now: .now) {
+                    for output in IndoorNavigator.findDoor(scene) {
                         if case .say(let said) = output { pieces += said }
                     }
                     for piece in pieces {

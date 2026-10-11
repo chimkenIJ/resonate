@@ -21,13 +21,11 @@ nonisolated enum SpeechPhrases {
         let directions: [RelativeDirection] = [.left, .slightlyLeft, .ahead, .slightlyRight, .right]
         phrases.formUnion(directions.map { "\($0.spoken)," })
         phrases.insert("right in front of you.")
-        // Indoors: "Door" "5 steps" "ahead, on your left." and how to turn.
+        // Indoors: "Door" "5 steps" "ahead, on your left."
         phrases.formUnion((1...IndoorComposer.maxSteps).map { IndoorComposer.steps(Double($0) * IndoorComposer.stepLength) })
         phrases.formUnion(stride(from: -180.0, through: 180, by: 5).map { "\(IndoorComposer.phrase(for: $0))." })
-        phrases.formUnion(stride(from: -180.0, through: 180, by: 5).map { IndoorComposer.turn(toward: $0).text })
-        phrases.formUnion(["Clear ahead.", "It's closed.", "It's open.", "You're at the door.", "You're at the doorway.",
-                           "Walk straight through.", "Found a door.", "I haven't found a door yet.", "I lost the door.",
-                           "Turn slowly, and I'll tell you when I see one.", "Stopped guiding.", "Find the railing."])
+        phrases.formUnion(["Clear ahead.", "It's closed.", "I haven't found a door yet.", "Find the railing.",
+                           "Room mapped.", "Keep turning slowly.", "I'm still scanning.", "Turn slowly in a full circle."])
 
         // How far (alerts and summaries only mention things within about 20 feet).
         phrases.formUnion(stride(from: 0.1, through: 6.5, by: 0.02).map { "\(DistanceText.spoken($0))." })
@@ -43,11 +41,8 @@ nonisolated enum SpeechPhrases {
         // Pedestrian signals.
         phrases.formUnion([SignalReading.walk.spoken, SignalReading.dontWalk.spoken])
 
-        // What to do (indoors).
-        phrases.formUnion([
-            "Step right to pass.", "Step left to pass.",
-            "Turn left or right.", IndoorComposer.closedDoorGuidance,
-        ])
+        // Outside, when both sides are blocked; indoors, how to open a closed door.
+        phrases.formUnion(["Turn left or right.", IndoorComposer.closedDoorGuidance])
 
         // Navigation phrases that should also work offline.
         phrases.formUnion([

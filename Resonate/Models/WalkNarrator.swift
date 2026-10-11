@@ -16,9 +16,10 @@ nonisolated struct WalkNarrator {
     nonisolated enum Output: Equatable, Sendable {
         /// Interrupt now.
         case urgent(ObstacleAlert)
-        /// The current picture, for the screen. `speak` is true when it changed enough to say out loud.
-        /// `obstacles` are the tracks it mentions, so the screen can keep their distances current.
-        case summary(ObstacleAlert, speak: Bool, advice: PathAdvice, obstacles: [UUID])
+        /// The current picture, for the screen, and `say`: only what's new since the last report (the
+        /// advice if it changed, things not mentioned lately), nil when there's nothing new.
+        /// `obstacles` are the tracks the screen shows, so it can keep their distances current.
+        case summary(ObstacleAlert, say: ObstacleAlert?, advice: PathAdvice, obstacles: [UUID])
         /// One light tap: the nearest thing in the path got closer.
         case pulse
     }
@@ -40,8 +41,9 @@ nonisolated struct WalkNarrator {
 
     /// How long to look before reporting, and the shortest time between reports.
     static let reportWindow: TimeInterval = 2
-    /// With nothing new to say, a short "Path clear." this often.
-    static let clearReminderInterval: TimeInterval = 15
+    /// Something already mentioned isn't mentioned again while it's still around, or until it's been
+    /// out of sight this long (unless it gets closer while in the way).
+    static let repeatAfter: TimeInterval = 20
     static let pulseCooldown: TimeInterval = 4
     /// The same kind of danger isn't called out again within this time unless it gets closer.
     static let urgentCooldown: TimeInterval = 8
@@ -51,8 +53,9 @@ nonisolated struct WalkNarrator {
 
     private var startedAt: Date?
     private var lastReportAt: Date = .distantPast
-    private var lastSpokenKey: String?
-    private var lastSpokenAt: Date = .distantPast
+    /// What's been said, by kind and side: how close it was then, and when it was last seen.
+    private var mentioned: [String: (bucket: Int, seen: Date)] = [:]
+    private var spokenAdvice: PathAdvice?
     private var advice: PathAdvice = .clear
     /// What's been seen lately (important or urgent), and when, by track.
     private var recentlySeen: [UUID: (track: TrackedObstacle, at: Date)] = [:]
@@ -109,6 +112,9 @@ nonisolated struct WalkNarrator {
         for track in tracks where track.isVisible && track.tier >= .important { recentlySeen[track.id] = (track, now) }
         recentlySeen = recentlySeen.filter { now.timeIntervalSince($0.value.at) <= Self.reportWindow }
         let recent = Self.distinct(recentlySeen.values.map(\.track))
+        // Anything already mentioned that's still around stays quiet.
+        mentioned = mentioned.filter { now.timeIntervalSince($0.value.seen) < Self.repeatAfter }
+        for track in recent { mentioned[Self.mentionKey(track)]?.seen = now }
 
         // Urgent: right away, once per kind of danger (a new camera track of the same thing doesn't count).
         let urgent = tracks.filter { $0.tier == .urgent }
@@ -125,11 +131,11 @@ nonisolated struct WalkNarrator {
             outputs.append(.urgent(Self.urgentAlert(for: first, clearance: clearance, others: Array(others))))
             if first.category == .stairs { startStairsQuiet(now) }
             saidDangers[Self.dangerKey(first)] = (Self.bucket(first.distance ?? 9), now, now)
-            // What the alert said counts as reported, so the next report doesn't repeat it.
+            // What the alert said counts as said, so the next report doesn't repeat it.
             lastReportAt = now
-            lastSpokenAt = now
+            for track in [first] + others { mentioned[Self.mentionKey(track)] = (Self.bucket(track.distance ?? 9), now) }
             advice = Self.advice(clearance: clearance, inPath: recent.filter(\.inPath), previous: advice)
-            lastSpokenKey = Self.reportKey(advice: advice, obstacles: Array(recent.prefix(Self.maxObstaclesSpoken)))
+            spokenAdvice = advice
         }
         // Everything urgent right now counts as said, so two at once don't stack and one that stays
         // in front isn't repeated.
@@ -148,25 +154,36 @@ nonisolated struct WalkNarrator {
         }
         if fresh.isEmpty { lastPulseBucket = bucket }
 
-        // A report from the last couple of seconds: what to do, then what's around.
+        // A report from the last couple of seconds: what to do, then what's around, but only what's new.
         guard now.timeIntervalSince(lastReportAt) >= Self.reportWindow else { return outputs }
-        let mentioned = Array(recent.prefix(Self.maxObstaclesSpoken))
+        let shown = Array(recent.prefix(Self.maxObstaclesSpoken))
         advice = Self.advice(clearance: clearance, inPath: recent.filter(\.inPath), previous: advice)
-        let summary = Self.summary(advice: advice, obstacles: mentioned)
-        if mentioned.contains(where: { $0.category == .stairs }) { startStairsQuiet(now) }
-        let key = Self.reportKey(advice: advice, obstacles: mentioned)
+        let summary = Self.summary(advice: advice, obstacles: shown)
+        if shown.contains(where: { $0.category == .stairs }) { startStairsQuiet(now) }
 
-        let changed = key != lastSpokenKey
-        let reminder = mentioned.isEmpty && advice == .clear && now.timeIntervalSince(lastSpokenAt) >= Self.clearReminderInterval
-        let speak = canSpeak && (changed || reminder)
-        if speak {
-            lastSpokenKey = key
-            lastSpokenAt = now
+        let newAdvice = advice != spokenAdvice
+        let newThings = Array(recent.filter(isNew).prefix(Self.maxObstaclesSpoken))
+        var say: ObstacleAlert?
+        if canSpeak, newAdvice || !newThings.isEmpty {
+            say = Self.summary(advice: advice, obstacles: newThings, sayAdvice: newAdvice)
+            spokenAdvice = advice
+            for track in newThings { mentioned[Self.mentionKey(track)] = (Self.bucket(track.distance ?? 9), now) }
         }
         // While something else is being read, report as soon as it finishes.
         if canSpeak { lastReportAt = now }
-        outputs.append(.summary(summary, speak: speak, advice: advice, obstacles: mentioned.map(\.id)))
+        outputs.append(.summary(summary, say: say, advice: advice, obstacles: shown.map(\.id)))
         return outputs
+    }
+
+    /// Not mentioned lately, or in the way and closer than when it was.
+    private func isNew(_ track: TrackedObstacle) -> Bool {
+        guard let said = mentioned[Self.mentionKey(track)] else { return true }
+        return track.inPath && Self.bucket(track.distance ?? 9) < said.bucket
+    }
+
+    /// The same kind of thing on the same side is the same thing, however the camera found it.
+    static func mentionKey(_ track: TrackedObstacle) -> String {
+        "\(track.label)|\(side(track.direction))"
     }
 
     /// One entry per thing, nearest first: the same kind of thing on the same side is one thing,
@@ -179,12 +196,6 @@ nonisolated struct WalkNarrator {
             nearest[key] = track
         }
         return nearest.values.sorted { ($0.distance ?? .infinity) < ($1.distance ?? .infinity) }
-    }
-
-    /// A report's meaning, without track identities: what to do, and what's where, roughly how far.
-    static func reportKey(advice: PathAdvice, obstacles: [TrackedObstacle]) -> String {
-        ([advice.rawValue] + obstacles.map { "\($0.label)-\(side($0.direction))-\(bucket($0.distance ?? 9))" })
-            .joined(separator: "|")
     }
 
     /// The kind of danger: a post and a sign are both "something in the way"; a drop-off, stairs,
@@ -263,9 +274,10 @@ nonisolated struct WalkNarrator {
     }
 
     /// "Path clear. Person on your right, 2 meters."
-    static func summary(advice: PathAdvice, obstacles: [TrackedObstacle]) -> ObstacleAlert {
+    /// `sayAdvice` false leaves out the advice (it hasn't changed since it was said).
+    static func summary(advice: PathAdvice, obstacles: [TrackedObstacle], sayAdvice: Bool = true) -> ObstacleAlert {
         var headline: [String] = []
-        var fragments = [advice.rawValue]
+        var fragments = sayAdvice ? [advice.rawValue] : []
         for track in obstacles {
             let pieces = observation(track)
             guard !pieces.isEmpty else { continue }

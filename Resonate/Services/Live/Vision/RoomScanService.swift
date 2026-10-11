@@ -222,6 +222,7 @@ final class RoomScanService: IndoorScanServicing {
 
         return IndoorSnapshot(
             elements: room + extra,
+            live: Set(extra.map(\.id)),
             pose: pose,
             objects: overlayBoxes(camera: camera, imageSize: imageSize, pose: pose) + seenOnly.filter(\.isVisible).map(\.object),
             coaching: coaching,

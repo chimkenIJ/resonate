@@ -111,6 +111,7 @@ RouteViewModel / WalkViewModel → LiveRoutingService → route Edge Function �
 | `ObjectDetector.swift`, `Models/ObjectCatalog.swift` | YOLO11s through Vision/Core ML; recognized labels and approximate object sizes |
 | `DepthReader.swift`, `Models/TerrainAnalyzer.swift` | LiDAR depth, coordinate conversion, terrain and obstacle analysis |
 | `RoomScanService.swift`, `Models/IndoorComposer.swift` | RoomPlan elements converted into indoor snapshots and guidance |
+| `Models/IndoorMap.swift`, `IndoorNavigator.swift` | Temporary room map (camera/depth finds kept 3 min, people 4 s, merged and forgotten when seen gone); a silent 360° mapping step first; then what's in front, left to right, from the map plus live vision, measured from the walking direction. Indoors never says where to go (no routing); "Find door" says where doors are |
 | `LiveColorRecognitionService.swift`, `Models/ColorNamer.swift` | Sample camera colors and map them to spoken names |
 | `Models/Alerts.swift`, `Detection.swift`, `Indoor.swift` | Detection, severity, guidance, and indoor data types |
 | `Components/CameraPreviewView.swift`, `Overlays.swift` | Camera session presentation and detection overlays |
