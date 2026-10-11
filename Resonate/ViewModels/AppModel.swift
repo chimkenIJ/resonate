@@ -16,6 +16,9 @@ final class AppModel {
     /// Shared by the Search tab and the voice assistant, so the assistant's searches show there.
     let search: DestinationSearchViewModel
     let assistant = VoiceAssistant()
+    /// The open camera screen that can describe the scene (walk, navigation, scan the area),
+    /// so the assistant can describe without leaving it.
+    weak var sceneDescriber: (any SceneDescribing)?
 
     private(set) var phase: Phase = .launching {
         didSet {

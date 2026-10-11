@@ -4,7 +4,7 @@ import Observation
 /// Outdoor walking: obstacle alerts always, plus spoken turn-by-turn when following a route.
 /// Turn-by-turn reroutes on its own when the user drifts off the route.
 @Observable
-final class WalkViewModel {
+final class WalkViewModel: SceneDescribing {
     enum Mode {
         case freeWalk
         case navigating(Route)
@@ -401,18 +401,20 @@ final class WalkViewModel {
         if sceneDescription == text { sceneDescription = nil }
     }
 
-    func describeScene() async {
+    /// Returns what was said, or nil if it failed or the screen closed.
+    @discardableResult
+    func describeScene() async -> String? {
         await describe(.outdoor, intro: "Looking around.", failure: "I couldn't describe the scene right now.")
     }
 
     /// Where the door is, whether it's open, and how to open it. Runs on arrival, or from the button.
     func findDoor() async {
-        await describe(.door, intro: "Looking for a door. Hold the phone up and turn slowly.",
+        _ = await describe(.door, intro: "Looking for a door. Hold the phone up and turn slowly.",
                        failure: "I couldn't look for the door right now. Try again in a moment.")
     }
 
-    private func describe(_ setting: SceneSetting, intro: String, failure: String) async {
-        guard !isDescribing else { return }
+    private func describe(_ setting: SceneSetting, intro: String, failure: String) async -> String? {
+        guard !isDescribing else { return nil }
         isDescribing = true
         defer { isDescribing = false }
         feedback.stopSpeech()
@@ -424,13 +426,15 @@ final class WalkViewModel {
             guard let jpeg = await detection.latestFrameJPEG() else { throw AppError.server(message: "The camera isn't ready yet.") }
             let text = try await describer.describe(jpeg: jpeg, setting: setting)
             // Left the screen while waiting: say nothing.
-            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return nil }
             sceneDescription = text
             await feedback.announce(text, priority: .snapshot)
             Task { await clearDescription(text) }
+            return text
         } catch {
-            guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
+            guard generation == feedback.screenGeneration, !Task.isCancelled else { return nil }
             await feedback.announce(failure, priority: .info)
+            return nil
         }
     }
 }

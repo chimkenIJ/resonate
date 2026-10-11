@@ -73,6 +73,12 @@ struct ResonateShortcuts: AppShortcutsProvider {
             systemImageName: "location.north.fill"
         )
         AppShortcut(
+            intent: DescribeSurroundingsIntent(),
+            phrases: ["What's around me in \(.applicationName)", "Describe my surroundings in \(.applicationName)"],
+            shortTitle: "What's Around Me",
+            systemImageName: "eye"
+        )
+        AppShortcut(
             intent: StopAssistantIntent(),
             phrases: ["Stop \(.applicationName) assistant"],
             shortTitle: "Stop Assistant",

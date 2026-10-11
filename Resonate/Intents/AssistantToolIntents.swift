@@ -22,7 +22,7 @@ protocol AssistantToolIntent: AppIntent {
 enum AssistantTools {
     static let all: [any AssistantToolIntent.Type] = [
         OpenScreenIntent.self, SearchPlacesIntent.self, ShowRouteIntent.self, StartNavigationIntent.self,
-        OpenCameraModeIntent.self, CloseScreenIntent.self, ListSavedPlacesIntent.self, SavePlaceIntent.self,
+        OpenCameraModeIntent.self, DescribeSurroundingsIntent.self, CloseScreenIntent.self, ListSavedPlacesIntent.self, SavePlaceIntent.self,
         ChangeSettingIntent.self, StopAssistantIntent.self,
     ]
 
@@ -180,6 +180,45 @@ extension OpenCameraModeIntent {
         self.init()
         mode = CameraMode(rawValue: toolInput["mode"]?.stringValue ?? "") ?? .walk
     }
+}
+
+struct DescribeSurroundingsIntent: AssistantToolIntent {
+    static let toolName = "describe_surroundings"
+    static let title: LocalizedStringResource = "Describe Surroundings"
+    static let description = IntentDescription("Describes what's in front of the camera. During navigation, directions keep going.")
+    static let openAppWhenRun = true
+
+    @Dependency private var app: AppModel
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        _ = try await run(on: app)
+        return .result() // the description is spoken in the app
+    }
+
+    @MainActor
+    func run(on app: AppModel) async throws -> IntentOutcome {
+        // A camera screen is open (walking, navigating, scanning): describe there, without leaving it.
+        if app.router.cover != nil, let describer = app.sceneDescriber {
+            guard let text = await describer.describeScene() else {
+                throw AppError.server(message: "I couldn't see the area right now. Try again in a moment.")
+            }
+            return IntentOutcome(
+                result: ["description": .string(text), "note": "This was already read aloud. Don't repeat it; answer follow-up questions from it."],
+                dialog: ""
+            )
+        }
+        // Otherwise open Scan the area, which describes on its own once the camera is ready.
+        app.router.cover = .scanArea
+        return IntentOutcome(
+            result: ["opened": "scan_area", "note": "The screen asks the user to hold the phone up, then reads the description aloud. Say nothing more."],
+            dialog: ""
+        )
+    }
+}
+
+extension DescribeSurroundingsIntent {
+    init(toolInput: JSONValue) { self.init() }
 }
 
 // MARK: - Places and routes

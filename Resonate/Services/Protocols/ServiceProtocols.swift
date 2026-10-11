@@ -171,6 +171,12 @@ protocol IndoorScanServicing: AnyObject {
     func latestFrameJPEG() async -> Data?
 }
 
+/// A camera screen that can describe what's in front of the user on request.
+protocol SceneDescribing: AnyObject {
+    /// Describes the scene aloud. Returns what was said, or nil if it failed or the screen closed.
+    func describeScene() async -> String?
+}
+
 /// On-demand descriptions from Gemini, through a Supabase Edge Function.
 protocol SceneDescriptionServicing: AnyObject {
     func describe(jpeg: Data, setting: SceneSetting) async throws -> String

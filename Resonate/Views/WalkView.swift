@@ -29,9 +29,15 @@ struct WalkView: View {
             }
         }
         .background(Palette.background)
-        .task { await model.run() }
+        .task {
+            app.sceneDescriber = model
+            await model.run()
+        }
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+            if app.sceneDescriber === model { app.sceneDescriber = nil }
+        }
         .accessibilityAction(.escape) { dismiss() }
     }
 

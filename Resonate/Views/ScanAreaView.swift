@@ -2,6 +2,7 @@ import SwiftUI
 
 /// "Scan the area": camera view with a spoken description of the surroundings. No obstacle alerts.
 struct ScanAreaView: View {
+    @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var model: ScanAreaViewModel
 
@@ -26,17 +27,21 @@ struct ScanAreaView: View {
             }
         }
         .background(Palette.background)
-        .task { await model.run() }
+        .task {
+            app.sceneDescriber = model
+            await model.run()
+        }
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+            if app.sceneDescriber === model { app.sceneDescriber = nil }
+        }
         .accessibilityAction(.escape) { dismiss() }
     }
 
     private var topBar: some View {
         HStack {
             BackButton(accessibilityLabel: "Back to home", style: .floating)
-            Spacer()
-            StatusPill(text: model.isStarting || model.isDescribing ? "Scanning" : "Camera on", accent: .sand)
             Spacer()
         }
         .padding(.horizontal, Metrics.screenPadding)

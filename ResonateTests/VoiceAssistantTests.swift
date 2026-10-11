@@ -125,6 +125,25 @@ struct VoiceAssistantTests {
         #expect(blocks.last?["text"]?.stringValue == "Kroger")
     }
 
+    @Test func describingDuringNavigationKeepsTheRoute() async throws {
+        let app = makeApp(assistant: ScriptedAssistant())
+        let route = SampleData.route(to: SampleData.places[0])
+        app.router.cover = .walk(route)
+        let walk = WalkViewModel(mode: .navigating(route), services: app.services, feedback: app.feedback)
+        app.sceneDescriber = walk
+
+        let result = try await AssistantTools.run("describe_surroundings", input: [:], on: app)
+
+        #expect(app.router.cover == .walk(route))
+        #expect(result["description"]?.stringValue?.isEmpty == false)
+    }
+
+    @Test func describingWithoutACameraOpensScanTheArea() async throws {
+        let app = makeApp(assistant: ScriptedAssistant())
+        _ = try await AssistantTools.run("describe_surroundings", input: [:], on: app)
+        #expect(app.router.cover == .scanArea)
+    }
+
     @Test func contentBlocksRoundTrip() throws {
         let text = #"{"input":{"place_id":"osm:node:1"},"signature":"abc/def","type":"tool_use","n":3}"#
         let value = try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))

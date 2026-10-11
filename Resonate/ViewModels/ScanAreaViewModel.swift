@@ -4,7 +4,7 @@ import Observation
 /// "Scan the area": turns on the camera, asks the user to hold the phone in front of them, and
 /// describes what's around them. No obstacle detection runs on this screen.
 @Observable
-final class ScanAreaViewModel {
+final class ScanAreaViewModel: SceneDescribing {
     private(set) var sceneDescription: String?
     private(set) var isStarting = true
     private(set) var isDescribing = false
@@ -64,6 +64,11 @@ final class ScanAreaViewModel {
         guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
         isStarting = false
         await describe()
+    }
+
+    func describeScene() async -> String? {
+        await describe()
+        return sceneDescription
     }
 
     /// Takes a picture and reads out what's in it.
