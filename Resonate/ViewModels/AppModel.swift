@@ -13,9 +13,15 @@ final class AppModel {
     let services: AppServices
     let feedback: FeedbackCenter
     let router: AppRouter
+    /// Shared by the Search tab and the voice assistant, so the assistant's searches show there.
+    let search: DestinationSearchViewModel
+    let assistant = VoiceAssistant()
 
     private(set) var phase: Phase = .launching {
-        didSet { if phase != oldValue { feedback.endScreenSpeech() } }
+        didSet {
+            if phase != oldValue { feedback.endScreenSpeech() }
+            if phase == .ready { assistant.appBecameReady() }
+        }
     }
     private(set) var authState: AuthState = .signedOut
     private(set) var preferences = UserPreferences() {
@@ -32,6 +38,8 @@ final class AppModel {
         )
         self.feedback = feedback
         self.router = AppRouter { feedback.endScreenSpeech() }
+        self.search = DestinationSearchViewModel(services: services)
+        assistant.attach(to: self)
     }
 
     func bootstrap() async {
@@ -57,6 +65,7 @@ final class AppModel {
     }
 
     func signOut() async {
+        assistant.stop()
         try? await services.auth.signOut()
         authState = .signedOut
         router.reset()

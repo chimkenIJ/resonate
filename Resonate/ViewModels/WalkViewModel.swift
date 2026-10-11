@@ -53,7 +53,12 @@ final class WalkViewModel {
     private var isStandingStill: Bool? {
         guard let first = recentPoses.first, let last = recentPoses.last,
               last.time.timeIntervalSince(first.time) >= 1.5 else { return recentPoses.isEmpty ? nil : false }
-        let maxMove = recentPoses.map { $0.position - first.position }.map { ($0.x * $0.x + $0.z * $0.z).squareRoot() }.max() ?? 0
+        let distances: [Double] = recentPoses.map { pose in
+            let dx: Double = pose.position.x - first.position.x
+            let dz: Double = pose.position.z - first.position.z
+            return (dx * dx + dz * dz).squareRoot()
+        }
+        let maxMove = distances.max() ?? 0
         return maxMove < 0.4
     }
     private(set) var navigation: NavigationEngine?

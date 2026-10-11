@@ -121,6 +121,33 @@ final class DestinationSearchViewModel {
         }
     }
 
+    /// Search for the voice assistant: shows the results on this screen and returns them,
+    /// or throws so the assistant can explain what went wrong.
+    func searchQuietly(_ text: String) async throws -> [Place] {
+        cancelListening()
+        query = text
+        let version = requestVersion
+        rememberSearch(text)
+        phase = .searching
+        do {
+            let here = try await currentLocation(timeout: 8)
+            guard GeorgiaRegion.contains(here) else { throw AppError.outsideGeorgia }
+            let matches = try await geocoding.search(text, near: here, limit: resultLimit)
+            if version == requestVersion {
+                results = matches
+                phase = .results
+            }
+            return matches
+        } catch {
+            let appError = (error as? AppError) ?? .server(message: "Search isn't working right now. Try again in a moment.")
+            if version == requestVersion {
+                results = []
+                fail(appError)
+            }
+            throw appError
+        }
+    }
+
     private func listen() async {
         guard await recognizer.requestAuthorization() else {
             fail(.permissionDenied(.speechRecognition))

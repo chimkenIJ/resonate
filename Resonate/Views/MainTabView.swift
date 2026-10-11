@@ -2,13 +2,10 @@ import SwiftUI
 
 /// Tabs (Home, Search, Saved, Settings) with a camera button in the middle.
 /// Each tab has its own navigation stack; camera screens open full screen above everything.
+/// When the voice assistant is on in Settings, its microphone replaces the camera button in the
+/// tab bar (the camera tools stay on Home) and floats over screens without the tab bar.
 struct MainTabView: View {
     @Environment(AppModel.self) private var app
-    @State private var searchModel: DestinationSearchViewModel
-
-    init(searchModel: DestinationSearchViewModel) {
-        _searchModel = State(initialValue: searchModel)
-    }
 
     var body: some View {
         @Bindable var router = app.router
@@ -18,15 +15,17 @@ struct MainTabView: View {
                 // On each tab's main screen (pushed screens have their own bottom buttons), so the
                 // screen's layout knows exactly how much room the tab bar takes.
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    ResonateTabBar(selection: $router.tab) {
+                    ResonateTabBar(selection: $router.tab, assistant: app.assistant.isEnabled ? app.assistant : nil) {
                         router.cover = .walk(nil)
                     }
                 }
                 .navigationDestination(for: AppRoute.self) { destination($0, in: router.tab) }
         }
         .id(router.tab)
+        .assistantMic()
         .fullScreenCover(item: $router.cover) { cover in
             coverView(cover)
+                .assistantMic(onEveryScreen: true)
                 .environment(app)
         }
     }
@@ -37,7 +36,7 @@ struct MainTabView: View {
         case .home:
             HomeView()
         case .search:
-            DestinationSearchView(model: searchModel)
+            DestinationSearchView(model: app.search)
         case .saved:
             SavedPlacesView(model: SavedPlacesViewModel(service: app.services.savedPlaces))
         case .settings:
@@ -80,7 +79,7 @@ struct MainTabView: View {
 
 #Preview {
     let app = AppModel.preview()
-    MainTabView(searchModel: DestinationSearchViewModel(services: app.services))
+    MainTabView()
         .environment(app)
         .preferredColorScheme(.dark)
 }

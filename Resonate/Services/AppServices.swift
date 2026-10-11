@@ -18,6 +18,7 @@ struct AppServices {
     let indoorScan: any IndoorScanServicing
     let sceneDescription: any SceneDescriptionServicing
     let colorRecognition: any ColorRecognitionServicing
+    let assistant: any AssistantServicing
 
     static func mock() -> AppServices {
         let location = MockLocationService()
@@ -36,13 +37,14 @@ struct AppServices {
             obstacleDetection: MockObstacleDetectionService(),
             indoorScan: MockIndoorScanService(),
             sceneDescription: MockSceneDescriptionService(),
-            colorRecognition: MockColorRecognitionService()
+            colorRecognition: MockColorRecognitionService(),
+            assistant: MockAssistantService()
         )
     }
 
     /// Everything real: accounts, saved places, location, search, routing, the ElevenLabs voice,
     /// voice input, obstacle detection, indoor scanning, Gemini descriptions, haptics, and tones.
-    /// Color recognition too: every service is real.
+    /// Color recognition and the Claude voice assistant too: every service is real.
     static func live(config: AppConfig) -> AppServices {
         let auth = Auth0AuthService(config: config)
         let client = SupabaseClientFactory.make(config: config, auth: auth)
@@ -71,7 +73,8 @@ struct AppServices {
                 ? LiDARObstacleDetectionService() : CameraObstacleDetectionService(),
             indoorScan: RoomScanService(),
             sceneDescription: GeminiSceneDescriptionService(client: functions),
-            colorRecognition: LiveColorRecognitionService()
+            colorRecognition: LiveColorRecognitionService(),
+            assistant: ClaudeAssistantService(client: functions)
         )
     }
 

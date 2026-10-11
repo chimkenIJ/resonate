@@ -77,6 +77,10 @@ Local search uses public Nominatim for light personal testing. Use the self-host
 
 Configure `ELEVENLABS_API_KEY` and `GEMINI_API_KEY` as Supabase function secrets, then deploy the `speak` and `describe` functions. For local functions, add the keys to the gitignored `supabase/functions/.env.local` and restart the local services. Optional settings are `ELEVENLABS_VOICE_ID` and `GEMINI_MODEL`.
 
+### Voice assistant
+
+The floating microphone talks to Claude through the `assistant` Edge Function. Configure `ANTHROPIC_API_KEY` as a Supabase function secret and deploy `assistant`. Keys that aren't scoped to a workspace also need `ANTHROPIC_WORKSPACE_ID`. Optional settings are `ANTHROPIC_MODEL` (default `claude-opus-5-5`) and `ANTHROPIC_EFFORT` (default `low`, for quick spoken replies). Turn the assistant on under **Settings → Voice assistant**, or say "Talk to Resonate" to Siri. Without a backend, a scripted mock handles simple requests such as "find Kroger" or "open saved places".
+
 The YOLO Core ML model is included in `Resonate/Resources/Models/`. See the [model notes](Resonate/Resources/Models/README.md) for export instructions and licensing.
 
 ## Project structure

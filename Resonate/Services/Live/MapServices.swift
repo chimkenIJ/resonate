@@ -34,8 +34,11 @@ final class EdgeFunctionClient {
         try JSONDecoder.snakeCase.decode(Response.self, from: await postForData(function, body: body, timeout: timeout))
     }
 
-    /// Raw response body (for audio).
-    func postForData<Body: Encodable & Sendable>(_ function: String, body: Body, timeout: TimeInterval = 20) async throws -> Data {
+    /// Raw response body (for audio). `encoder` defaults to snake_case keys; pass a plain one for
+    /// bodies whose keys must go through unchanged.
+    func postForData<Body: Encodable & Sendable>(
+        _ function: String, body: Body, timeout: TimeInterval = 20, encoder: JSONEncoder = .snakeCase
+    ) async throws -> Data {
         try Task.checkCancellation()
         var request = URLRequest(url: baseURL.appending(path: function))
         request.httpMethod = "POST"
@@ -45,7 +48,7 @@ final class EdgeFunctionClient {
         if let token = try? await auth.accessToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        request.httpBody = try JSONEncoder.snakeCase.encode(body)
+        request.httpBody = try encoder.encode(body)
         try Task.checkCancellation()
 
         let data: Data
