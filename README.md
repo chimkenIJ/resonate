@@ -69,7 +69,11 @@ Without a complete `ResonateConfig.plist`, the app automatically uses mock servi
 
 To confirm demo mode, check the Xcode console for `ResonateConfig.plist missing or incomplete; running on mock services.` If you already configured live services, use a separate checkout without your local configuration file to try the demo.
 
-To run on an iPhone, select your device in Xcode and set your development team under **Signing & Capabilities**. Use an iPhone running iOS 17 or later. Real camera detection needs a physical device, and indoor room scanning needs a supported LiDAR device. The simulator cannot verify camera, LiDAR, or vibration behavior.
+### Run on an iPhone
+
+Select your device in Xcode and set your development team under **Signing & Capabilities**, then build and run. Grant camera and location access when using the corresponding tools.
+
+Real camera detection and color recognition require a physical device and live services. Indoor room scanning also requires supported LiDAR hardware. On phones without LiDAR, obstacle distances use object-size estimates. The simulator cannot validate camera accuracy, LiDAR depth, or vibration behavior.
 
 ### Search and routing
 
