@@ -1,48 +1,62 @@
 # Resonate
 
-Resonate is an iOS accessibility prototype that helps blind and low-vision users explore their surroundings through obstacle detection, spoken feedback, vibration cues, and walking routes with accessibility information.
+Resonate is an iOS accessibility prototype for blind and low-vision users who want richer situational awareness while navigating the world.
 
-The app brings outdoor navigation and indoor room scanning into one interface, with preferences for how users receive feedback. Outdoor search and routing currently focus on Atlanta and Georgia; indoor room scanning requires a supported LiDAR iPhone.
+Everyday navigation is hard when you cannot reliably tell what is in front of you, where the safest route is, or how to understand indoor spaces. Resonate brings obstacle detection, spoken guidance, vibration cues, and accessibility-aware mapping into one app to help users explore surroundings and navigate with more confidence.
 
-Resonate is a prototype intended to supplement a cane or guide dog. Detection and map information can be incomplete, and distance estimates are approximate. See [Limits](#limits) before trying the app.
+The app combines obstacle detection, spoken feedback, vibration cues, and walking routes with accessibility-aware mapping so users can better understand both indoor and outdoor spaces. It is designed to supplement a cane or guide dog, not replace it. Outdoor routing focuses on Atlanta and Georgia; indoor room scanning requires a supported LiDAR iPhone.
+
+This is an early prototype. Detection, distance estimates, and map data may be incomplete or approximate. See [Limits](#limits) before relying on the app in real-world settings.
+
+## Quick start
+
+If you want to try the interface without live services:
+
+1. Clone the repository.
+2. Open `Resonate.xcodeproj` in Xcode.
+3. Select the **Resonate** scheme and an iPhone simulator.
+4. Press **⌘R** to build and run.
+5. Choose **Continue without account** and complete onboarding.
+
+If `ResonateConfig.plist` is missing or incomplete, the app automatically runs in mock/demo mode. No API keys or backend are required for the interface demo.
 
 ## Features
 
-- **Explore surroundings:** detect supported objects and provide distance estimates with speech, vibration, and audio cues.
-- **Find a destination:** search places and follow walking routes informed by available accessibility tags.
+- **Explore surroundings:** detect supported objects and announce distance estimates with spoken, haptic, and audio feedback.
+- **Find a destination:** search for places and follow walking routes informed by available accessibility tags.
 - **Scan a room:** use RoomPlan on a supported LiDAR iPhone.
 - **Describe a scene:** request a camera-based description through Gemini.
 - **Recognize colors:** name colors sampled from the center of the camera view.
 - **Save places:** organize destinations in folders and choose feedback preferences.
 
-These features use simulated services in demo mode. Live services require the configuration below.
+These features run against simulated services in demo mode. Live services require additional setup described below.
 
 ## App flow
 
 Sign in or continue as a guest → onboarding and preferences → home.
 
-From home, choose a destination for outdoor navigation or open a tool to explore nearby surroundings. Saved places are organized into folders for later use.
+From home, users can choose a destination for outdoor navigation or open a tool to inspect nearby surroundings. Saved places are organized into folders for later use.
 
-With live services configured, signed-in users store saved places and preferences in the backend; guests keep them on the phone. Choosing guest access does not by itself enable demo mode: the app configuration determines whether services are live or simulated.
+With live services configured, signed-in users store saved places and preferences in the backend; guests keep them on the phone. Choosing guest access does not by itself enable demo mode—the app configuration determines whether services are live or simulated.
 
-## Stack
+## Tech stack
 
 | Part | Implementation |
 | --- | --- |
-| iOS app | Swift and SwiftUI, built in Xcode using MVVM |
-| Object detection | Apple Vision and Core ML running YOLO11s on the device |
-| Distance | ARKit LiDAR where available; object-size estimates on non-LiDAR phones |
+| iOS app | Swift and SwiftUI in Xcode using MVVM |
+| Object detection | Apple Vision and Core ML running YOLO11s on device |
+| Distance estimation | ARKit LiDAR where available; object-size estimates on non-LiDAR phones |
 | Indoor scanning | Apple RoomPlan with LiDAR |
 | Color recognition | AVFoundation camera sampling and on-device color naming |
-| Maps and outdoor routes | MapKit for display, OpenStreetMap data, Nominatim search, and Valhalla walking routes |
-| Feedback | ElevenLabs voice, AVSpeechSynthesizer as an offline fallback, Core Haptics, and audio cues |
-| Scene descriptions | Gemini through a backend function, requested by the user |
+| Maps and outdoor routes | MapKit, OpenStreetMap data, Nominatim search, and Valhalla walking routes |
+| Feedback | ElevenLabs voice, AVSpeechSynthesizer fallback, Core Haptics, and audio cues |
+| Scene descriptions | Gemini through a backend function |
 | Authentication | Auth0 |
 | Backend | Supabase Postgres/PostGIS and Edge Functions |
 
 ## Geographic coverage
 
-Outdoor search, routing, and accessibility features are scoped to Atlanta and Georgia using OpenStreetMap data. The map server imports the Georgia extract, including tags for crossings, curb ramps, tactile paving, steps, and other accessibility features. MapKit supplies the map display.
+Outdoor search, routing, and accessibility metadata are scoped to Atlanta and Georgia using OpenStreetMap data. The map server imports the Georgia extract, including tags for crossings, curb ramps, tactile paving, steps, and other accessibility features. MapKit handles the map display.
 
 The current region checks use a Georgia bounding box, which includes small parts of neighboring states. See the [backend setup guide](docs/BACKEND_SETUP.md#2e-exact-georgia-border-optional) for loading the exact state boundary.
 
@@ -50,8 +64,8 @@ The current region checks use a Georgia bounding box, which includes small parts
 
 | Goal | Requirements |
 | --- | --- |
-| Explore the demo interface | Mac, compatible Xcode release, and an iPhone simulator or iPhone |
-| Try live camera tools | Physical iPhone running iOS 17 or later, camera permission, and live app configuration |
+| Explore the demo interface | Mac, a compatible Xcode release, and an iPhone simulator or iPhone |
+| Try live camera tools | Physical iPhone running iOS 17+, camera permission, and live app configuration |
 | Scan indoor rooms | Supported LiDAR iPhone |
 | Run local routing services | Mac with Docker Desktop, Node.js/npm, and Python 3 |
 
@@ -65,15 +79,15 @@ The deployment target is iOS 17.0. Use a recent Xcode release compatible with th
 4. Press **⌘R** to build and run.
 5. Choose **Continue without account**, finish onboarding, and try the home, search, route, and saved-place screens.
 
-Without a complete `ResonateConfig.plist`, the app automatically uses mock services. No API keys or backend are needed for this demo. Locations, routes, detection, and feedback are simulated; this mode is for trying the interface.
+Without a complete `ResonateConfig.plist`, the app automatically uses mock services. No API keys or backend are needed for the demo. Locations, routes, detection, and feedback are simulated so the interface can be explored without live infrastructure.
 
-To confirm demo mode, check the Xcode console for `ResonateConfig.plist missing or incomplete; running on mock services.` If you already configured live services, use a separate checkout without your local configuration file to try the demo.
+To confirm demo mode, check the Xcode console for: `ResonateConfig.plist missing or incomplete; running on mock services.` If you have already configured live services, use a separate checkout without your local configuration file to try the demo.
 
 ### Run on an iPhone
 
 Select your device in Xcode and set your development team under **Signing & Capabilities**, then build and run. Grant camera and location access when using the corresponding tools.
 
-Real camera detection and color recognition require a physical device and live services. Indoor room scanning also requires supported LiDAR hardware. On phones without LiDAR, obstacle distances use object-size estimates. The simulator cannot validate camera accuracy, LiDAR depth, or vibration behavior.
+Real camera detection and color recognition require a physical device and live services. Indoor room scanning also requires supported LiDAR hardware. On phones without LiDAR, obstacle distances use object-size estimates. The simulator cannot validate physical camera accuracy, LiDAR depth, or haptic behavior.
 
 ## Configure live services
 
@@ -91,7 +105,7 @@ The local plist is gitignored. Missing, empty, or `YOUR_` placeholder values in 
 
 ### Search and routing
 
-Follow [Map server setup](docs/MAP_SERVER.md) for the Georgia OSM import, Valhalla, Nominatim, accessibility data, and the `geocode` and `route` Edge Functions.
+Follow [Map server setup](docs/MAP_SERVER.md) for the Georgia OSM import, Valhalla, Nominatim, accessibility processing, and the `geocode` and `route` Edge Functions.
 
 For local testing on your Mac, install Docker Desktop, Node.js/npm, and Python 3. Complete [account configuration](#accounts-and-saved-places) first, then create `supabase/functions/.env.local` containing:
 
@@ -108,7 +122,7 @@ server/scripts/dev_up.sh
 
 The script starts local routing and Supabase, loads accessibility points, and updates the app's `FunctionsURL` and `FunctionsKey`. The first run downloads Georgia map data and builds routing tiles, so allow time for it to finish. Accounts and saved places still use your configured hosted Supabase project.
 
-Rebuild the app in Xcode. For a phone, keep the Mac awake, put both devices on the same Wi-Fi, and allow Local Network access when prompted. For a simulator, set `FunctionsURL` to `http://127.0.0.1:54321/functions/v1` if the Mac's `.local` address is unreachable.
+Rebuild the app in Xcode. For a phone, keep the Mac awake, put both devices on the same Wi‑Fi, and allow Local Network access when prompted. For a simulator, set `FunctionsURL` to `http://127.0.0.1:54321/functions/v1` if the Mac's `.local` address is unreachable.
 
 Stop the local services with:
 
@@ -153,7 +167,7 @@ docs/            Backend and map setup guides
 
 ## Testing
 
-Select the **Resonate** scheme and an iPhone simulator in Xcode, then press **⌘U**. The test suite includes navigation logic, preferences, alerts, speech dispatch, indoor descriptions, terrain analysis, and color naming.
+Select the **Resonate** scheme and an iPhone simulator in Xcode, then press **⌘U**. The test suite covers navigation logic, preferences, alerts, speech dispatch, indoor descriptions, terrain analysis, and color naming.
 
 For a manual demo check, continue as a guest, complete onboarding, search for a destination, and save a place in a folder. For live testing, verify sign-in and saved-place persistence after backend setup, then check camera tools and feedback on a physical iPhone.
 
