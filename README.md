@@ -1,10 +1,10 @@
 # Resonate
 
-Resonate is an AI-powered accessibility app that helps people with disabilities navigate and understand their surroundings.
+Resonate is an iOS accessibility prototype that helps blind and low-vision users explore their surroundings through obstacle detection, spoken feedback, vibration cues, and walking routes with accessibility information.
 
-The initial focus is blind and low-vision users. The app combines obstacle detection, spoken feedback, vibration cues, and walking routes with accessibility information. It supports outdoor navigation and indoor room scanning, with room to add tools for other needs, including color recognition.
+The app brings outdoor navigation and indoor room scanning into one interface, with preferences for how users receive feedback. Outdoor search and routing currently focus on Atlanta and Georgia; indoor room scanning requires a supported LiDAR iPhone.
 
-Everyday navigation can be difficult when crossings, sidewalks, entrances, and obstacles aren't clearly described. Resonate brings that information into one app and lets users choose the feedback and routing preferences that work for them.
+Resonate is a prototype intended to supplement a cane or guide dog. Detection and map information can be incomplete, and distance estimates are approximate. See [Limits](#limits) before trying the app.
 
 ## App flow
 
