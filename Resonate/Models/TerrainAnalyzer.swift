@@ -11,6 +11,8 @@ nonisolated struct TerrainSample: Sendable {
     var height: Double
     /// Vertical position in the upright camera image (0 = top, 1 = bottom), for drawing the overlay.
     var imageY: Double
+    /// Horizontal position in the upright camera image (0 = left, 1 = right), for outlining obstacles.
+    var imageX: Double = 0.5
 }
 
 /// Finds what YOLO can't: curb drops and other drop-offs, steps up, and unlabeled things in the

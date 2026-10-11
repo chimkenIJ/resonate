@@ -43,7 +43,8 @@ struct SpeechPhrasesTests {
     /// Every indoor update, alert, and door guidance line can be played from pre-recorded pieces.
     @Test func everyIndoorUpdateIsPrerecorded() throws {
         let pose = FloorPose(position: .zero, forward: SIMD2(0, -1))
-        let labels = ["Chair", "Table", "Stairs", "Couch", "Cabinet", "Person", "People", "Wall", "Door", "Doorway"]
+        let labels = ["Chair", "Table", "Stairs", "Couch", "Cabinet", "Person", "People", "Wall", "Door", "Doorway",
+                      "Plant", "TV", "Bag", "Dog", "Obstacle", "Step up", "Step down"]
         for label in labels {
             for ahead in stride(from: 0.4, through: 9, by: 0.3) {
                 for right in stride(from: -4.0, through: 4, by: 1) {
@@ -51,7 +52,8 @@ struct SpeechPhrasesTests {
                     case "Wall": RoomElement(kind: .wall, label: "Wall", category: .wall, footprint: [SIMD2(-2 + right, -ahead), SIMD2(2 + right, -ahead)])
                     case "Door": RoomElement(kind: .door(isOpen: ahead > 3), label: "Door", category: .door, footprint: [SIMD2(right - 0.4, -ahead), SIMD2(right + 0.4, -ahead)])
                     case "Doorway": RoomElement(kind: .opening, label: "Doorway", category: .door, footprint: [SIMD2(right - 0.4, -ahead), SIMD2(right + 0.4, -ahead)])
-                    default: RoomElement(kind: .object, label: label, category: label == "Stairs" ? .stairs : .furniture,
+                    default: RoomElement(kind: .object, label: label,
+                                         category: label == "Stairs" || label == "Step up" ? .stairs : (label == "Step down" ? .dropOff : .furniture),
                                          footprint: [SIMD2(right - 0.2, -ahead), SIMD2(right + 0.2, -ahead), SIMD2(right + 0.2, -ahead - 0.4), SIMD2(right - 0.2, -ahead - 0.4)])
                     }
                     let scene = IndoorComposer.compose([element], pose: pose)

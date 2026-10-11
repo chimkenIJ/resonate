@@ -124,10 +124,47 @@ struct IndoorComposerTests {
 
     @Test func onlyWhatMattersIsOutlined() {
         let path = object("Chair", ahead: 1.5, right: 0)
-        let aside = object("Cabinet", ahead: 1, right: 2.5)
+        let aside = object("Cabinet", ahead: 1, right: 3.8)
         let result = IndoorComposer.compose([path, aside, wall(from: (-1, -3), to: (6, -3))], pose: pose)
         #expect(result.relevant.contains(path.id))
         #expect(!result.relevant.contains(aside.id))
+    }
+
+    @Test func mentionsWhatsNearbyByName() {
+        let chair = object("Chair", ahead: 2, right: -1.5)
+        let plant = object("Plant", ahead: 2.6, right: 1.4, category: .obstacle)
+        let result = IndoorComposer.compose([chair, plant], pose: pose)
+        #expect(result.summary.joined(separator: " ") == "Chair 3 steps ahead, on your left. Plant 4 steps ahead, on your right.")
+        #expect(result.relevant.isSuperset(of: [chair.id, plant.id]))
+    }
+
+    @Test func neverMoreThanTwoThingsAtOnce() {
+        let things = (0..<6).map { object("Chair", ahead: 1.5 + Double($0) * 0.2, right: $0.isMultiple(of: 2) ? -1.2 : 1.2) }
+        let said = IndoorComposer.compose(things, pose: pose).summary.joined(separator: " ")
+        #expect(said.components(separatedBy: "Chair").count - 1 == 2)
+    }
+
+    @Test func walkingCloserToNearbyThingsDoesNotRepeatThem() {
+        let chair = UUID(), table = UUID()
+        func scene(_ ahead: Double) -> IndoorComposer.Result {
+            IndoorComposer.compose([object("Chair", ahead: ahead, right: -1.3, id: chair),
+                                    object("Table", ahead: ahead + 0.5, right: 1.3, id: table)], pose: pose)
+        }
+        #expect(scene(2.3).summaryKey == scene(1.8).summaryKey)
+    }
+
+    @Test func aStepSaysWatchTheStep() throws {
+        let step = object("Step down", ahead: 1.2, right: 0, size: 0.6, category: .dropOff)
+        let result = IndoorComposer.compose([step], pose: pose)
+        #expect(result.summary.last == "Watch the step.")
+        // A single step isn't stairs: no early "Find the railing".
+        #expect(result.alert == nil)
+    }
+
+    @Test func distanceToAnElement() {
+        let chair = object("Chair", ahead: 2, right: 0, size: 0.4)
+        #expect(IndoorComposer.distance(from: at(2, 0), to: chair) == 0)
+        #expect(abs(IndoorComposer.distance(from: at(2, 1.2), to: chair) - 1.0) < 1e-9)
     }
 
     @Test func miniMapPutsThingsAheadAboveTheUser() throws {

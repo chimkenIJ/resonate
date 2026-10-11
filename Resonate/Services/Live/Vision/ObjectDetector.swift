@@ -71,16 +71,18 @@ nonisolated enum FrameAnalysis {
     ///   - focalLengthPixels: focal length of the upright image, for size-based estimates and sideways offsets.
     ///   - imageHeightPixels, imageWidthPixels: size of the upright image in pixels.
     ///   - world: ARKit world position of an image point at a distance, when available.
+    ///   - catalog: which classes to keep and what to call them (walking outside by default; indoors has its own).
     static func objects(
         from detections: [RawDetection],
         depth: (CGRect) -> Double?,
         focalLengthPixels: Double,
         imageHeightPixels: Double,
         imageWidthPixels: Double,
-        world: (CGPoint, Double) -> SIMD3<Double>? = { _, _ in nil }
+        world: (CGPoint, Double) -> SIMD3<Double>? = { _, _ in nil },
+        catalog: (String) -> ObjectCatalog.Entry? = ObjectCatalog.entry(for:)
     ) -> [DetectedObject] {
         detections.compactMap { detection in
-            guard let entry = ObjectCatalog.entry(for: detection.identifier) else { return nil }
+            guard let entry = catalog(detection.identifier) else { return nil }
             let touchesEdge = detection.box.minY < 0.01 || detection.box.maxY > 0.99
             let boxHeightPixels = detection.box.height * imageHeightPixels
             let estimate = ObjectCatalog.estimatedDistance(

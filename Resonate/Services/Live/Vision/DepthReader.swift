@@ -103,7 +103,8 @@ nonisolated struct DepthReader {
                     forward: Double(simd_dot(world, forward)),
                     lateral: Double(simd_dot(world, right)),
                     height: Double(world.y),
-                    imageY: (Double(x) + 0.5) / Double(width)
+                    imageY: (Double(x) + 0.5) / Double(width),
+                    imageX: 1 - (Double(y) + 0.5) / Double(height)
                 ))
             }
         }

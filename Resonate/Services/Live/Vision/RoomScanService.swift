@@ -5,22 +5,31 @@ import RoomPlan
 import simd
 
 /// Indoor scanning with Apple RoomPlan (LiDAR): walls, doors (open or closed), doorways, furniture,
-/// and stairs, in real time. YOLO adds people and pets, which RoomPlan doesn't track; they're
-/// measured with LiDAR depth, grouped (a person with a bag, people together), and tracked so each
-/// is recognized once. Everything runs on the phone.
+/// and stairs, in real time. On top of that, the camera recognizes what RoomPlan doesn't (people,
+/// pets, plants, bags, the TV, and furniture before RoomPlan has mapped it; see IndoorCatalog), and
+/// the depth sensor catches anything else in the way and single steps. All of it is measured with
+/// LiDAR, grouped (a person with a bag), and tracked so each thing is recognized once and keeps its
+/// name. Everything runs on the phone.
 final class RoomScanService: IndoorScanServicing {
     static var isSupportedOnDevice: Bool { RoomCaptureSession.isSupported }
 
-    private let captureSession = RoomCaptureSession()
+    /// Our own AR session, shared with RoomPlan, so the app can ask for LiDAR depth (RoomPlan's own session
+    /// doesn't hand depth to the app, and without it nothing unnamed, like a pole or a cone, can be seen).
+    private let arSession = ARSession()
+    private lazy var captureSession = RoomCaptureSession(arSession: arSession)
+    private var checkedDepth = false
     private let delegateProxy = RoomDelegateProxy()
     private let detector = ObjectDetector()
     private var elements: [RoomElement] = []
     private var coaching: String?
     private var loop: Task<Void, Never>?
     private var tracker = ObstacleTracker()
+    /// The floor's height in world space, remembered so obstacles are still found while the phone is
+    /// held level and the floor right in front is out of view.
+    private var floorWorldY: Double?
 
-    /// YOLO classes that matter indoors (RoomPlan covers furniture).
-    private static let movingClasses: Set<String> = ["person", "dog", "cat", "suitcase", "backpack"]
+    /// The camera's things that RoomPlan already found within this distance are dropped (no doubles).
+    nonisolated private static let duplicateDistance = 0.6
 
     var isSupported: Bool { Self.isSupportedOnDevice }
     var previewSource: CameraPreviewSource { .ar(captureSession.arSession) }
@@ -41,6 +50,8 @@ final class RoomScanService: IndoorScanServicing {
             }
             elements = []
             tracker = ObstacleTracker()
+            floorWorldY = nil
+            checkedDepth = false
             var configuration = RoomCaptureSession.Configuration()
             configuration.isCoachingEnabled = true
             captureSession.run(configuration: configuration)
@@ -64,6 +75,9 @@ final class RoomScanService: IndoorScanServicing {
         captureSession.stop()
     }
 
+    /// Indoors a small drop is a step, not a curb.
+    nonisolated static let stepDown = "Step down"
+
     func latestFrameJPEG() async -> Data? {
         guard let frame = captureSession.arSession.currentFrame else { return nil }
         return FrameRelay.jpeg(from: frame.capturedImage)
@@ -71,8 +85,33 @@ final class RoomScanService: IndoorScanServicing {
 
     // MARK: Snapshot
 
+    /// Once scanning has started: if RoomPlan's configuration didn't turn on depth, turn it on, keeping
+    /// tracking and the room so far.
+    private func ensureDepth(_ frame: ARFrame) {
+        guard !checkedDepth else { return }
+        if frame.sceneDepth != nil || frame.smoothedSceneDepth != nil {
+            checkedDepth = true
+            Log.vision.notice("Room scan depth: available")
+            return
+        }
+        // Wait until RoomPlan has set the session up, then add depth to its configuration.
+        guard let running = arSession.configuration as? ARWorldTrackingConfiguration,
+              let configuration = running.copy() as? ARWorldTrackingConfiguration else { return }
+        checkedDepth = true
+        if ARWorldTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth) {
+            configuration.frameSemantics.insert(.smoothedSceneDepth)
+        } else if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
+            configuration.frameSemantics.insert(.sceneDepth)
+        } else {
+            return
+        }
+        Log.vision.notice("Room scan had no depth; turning it on")
+        arSession.run(configuration)
+    }
+
     private func makeSnapshot() async -> IndoorSnapshot? {
         guard let frame = captureSession.arSession.currentFrame else { return nil }
+        ensureDepth(frame)
         let camera = frame.camera
         let transform = camera.transform
         let position = simd_make_float3(transform.columns.3)
@@ -83,34 +122,78 @@ final class RoomScanService: IndoorScanServicing {
         forward /= length
         let pose = FloorPose(position: SIMD2(Double(position.x), Double(position.z)), forward: forward)
 
-        // People and pets from YOLO, measured with LiDAR depth, off the main thread.
+        // The camera's objects and the depth sensor's obstacles and steps, measured with LiDAR, off the main thread.
         let resolution = camera.imageResolution
         let imageSize = CGSize(width: resolution.height, height: resolution.width)
         nonisolated(unsafe) let arFrame = frame
         let detector = detector
-        let classes = Self.movingClasses
-        let found = await Task.detached(priority: .userInitiated) { () -> [DetectedObject] in
+        let knownFloor = floorWorldY
+        let (found, floor) = await Task.detached(priority: .userInitiated) { () -> ([DetectedObject], Double?) in
             let frame = arFrame
-            let detections = detector.detect(in: frame.capturedImage, orientation: .right).filter { classes.contains($0.identifier) }
-            guard !detections.isEmpty else { return [] }
+            let detections = detector.detect(in: frame.capturedImage, orientation: .right)
             let geometry = CameraGeometry(frame.camera)
             let walkingPose = geometry.pose
             func objects(depth: (CGRect) -> Double?) -> [DetectedObject] {
                 FrameAnalysis.objects(from: detections, depth: depth, focalLengthPixels: geometry.focalLengthPixels,
                                       imageHeightPixels: Double(resolution.width), imageWidthPixels: geometry.uprightWidthPixels,
-                                      world: { point, distance in walkingPose == nil ? nil : geometry.worldPoint(portrait: point, depth: distance) })
+                                      world: { point, distance in walkingPose == nil ? nil : geometry.worldPoint(portrait: point, depth: distance) },
+                                      // Real names indoors, and everything walking outside knows about too (posts, signs…).
+                                      catalog: { IndoorCatalog.entry(for: $0) ?? ObjectCatalog.entry(for: $0) })
             }
-            if let depth = frame.smoothedSceneDepth ?? frame.sceneDepth {
-                return DepthReader.read(depth, camera: frame.camera) { reader in objects(depth: { reader.distance(in: $0) }) } ?? []
-            }
-            return objects(depth: { _ in nil })
-        }.value
+            guard let depth = frame.smoothedSceneDepth ?? frame.sceneDepth else { return (objects(depth: { _ in nil }), nil) }
+            return DepthReader.read(depth, camera: frame.camera) { reader -> ([DetectedObject], Double?) in
+                let seen = objects(depth: { reader.distance(in: $0) })
+                let samples = reader.terrainSamples()
+                let phoneY = walkingPose?.origin.y ?? 0
 
-        // Recognized once, then followed: one element per person (or group), only once confirmed.
+                // Steps up or down, and the same "something in the way" check walking outside uses.
+                let findings = TerrainAnalyzer.analyze(samples)
+                let steps = TerrainAnalyzer.objects(from: findings).map { item in
+                    var item = item
+                    if item.label == "Curb drop" { item.label = Self.stepDown }
+                    if let walkingPose, let distance = item.distanceMeters { item.worldPosition = walkingPose.origin + walkingPose.forward * distance }
+                    return item
+                }
+
+                // Anything standing on the floor, named or not. What the camera already named is skipped here.
+                let measuredFloor = IndoorObstacles.floorLevel(samples)
+                guard let floor = measuredFloor ?? knownFloor.map({ $0 - phoneY }) else { return (seen + steps, nil) }
+                let things = IndoorObstacles.find(samples, floor: floor)
+                let unknown = things.compactMap { thing -> DetectedObject? in
+                    let world = walkingPose.map { $0.origin + $0.forward * thing.forward + $0.right * thing.lateral }
+                    let named = seen.contains { object in
+                        if let world, let other = object.worldPosition {
+                            let gap = SIMD2(world.x - other.x, world.z - other.z)
+                            return (gap * gap).sum().squareRoot() <= Self.duplicateDistance
+                        }
+                        return ObstacleTracker.iou(object.boundingBox, thing.box) >= 0.3
+                    }
+                    guard !named else { return nil }
+                    return DetectedObject(label: ObstacleTracker.genericLabel, category: .obstacle, confidence: 1,
+                                          boundingBox: thing.box, distanceMeters: thing.distance,
+                                          lateralMeters: thing.lateral, worldPosition: world)
+                }
+                // The outdoor-style check found the same thing the obstacle finder or the camera did: say it once.
+                let others = steps.filter { item in
+                    guard item.label == ObstacleTracker.genericLabel, let distance = item.distanceMeters else { return true }
+                    return !things.contains { abs($0.distance - distance) < 0.8 && abs($0.lateral) < 0.8 }
+                        && !seen.contains { abs(($0.distanceMeters ?? 99) - distance) < 0.8 && (0.25...0.75).contains($0.boundingBox.midX) }
+                }
+                return (seen + others + unknown, measuredFloor.map { $0 + phoneY })
+            } ?? ([], nil)
+        }.value
+        if let floor {
+            // Smooth it: the floor doesn't move, the estimate wobbles a little.
+            floorWorldY = floorWorldY.map { $0 * 0.8 + floor * 0.2 } ?? floor
+        }
+
+        // Recognized once, then followed, keeping the name it's been seen as most often.
         let tracks = tracker.update(with: DetectionFrame(objects: SceneGrouping.group(found), depthSource: .lidar,
                                                          pose: CameraGeometry(camera).pose), now: .now)
-        let moving = tracks.filter { $0.isConfirmed && ($0.isVisible || $0.worldPosition != nil) }
-        let people = moving.compactMap { track -> RoomElement? in
+        let room = elements
+        let confirmed = tracks.filter { $0.isConfirmed && ($0.isVisible || $0.worldPosition != nil) }
+        var seenOnly: [TrackedObstacle] = []
+        let extra = confirmed.compactMap { track -> RoomElement? in
             let center: SIMD2<Double>
             if let world = track.worldPosition {
                 center = SIMD2(world.x, world.z)
@@ -119,7 +202,18 @@ final class RoomScanService: IndoorScanServicing {
             } else {
                 return nil
             }
-            let half = track.label == SceneGrouping.people ? 0.5 : 0.25
+            // Already in the room scan: RoomPlan's version has the real shape, so keep that one. Something
+            // found only by depth is the room scan's when it sits inside a piece of furniture or against a wall
+            // (it's part of that wall); a cone a little way from the wall is still its own obstacle.
+            let fromDepth = track.label == ObstacleTracker.genericLabel || track.category == .stairs || track.category == .dropOff
+            let duplicate = room.contains { element in
+                let gap = IndoorComposer.distance(from: center, to: element)
+                guard fromDepth else { return element.label == track.label && gap <= Self.duplicateDistance }
+                return element.kind == .object ? gap <= 0.2 : gap <= 0.3
+            }
+            guard !duplicate else { return nil }
+            seenOnly.append(track)
+            let half = track.label == SceneGrouping.people ? 0.5 : (track.category == .furniture ? 0.35 : 0.25)
             return RoomElement(kind: .object, label: track.label, category: track.category, footprint: [
                 center + SIMD2(-half, -half), center + SIMD2(half, -half),
                 center + SIMD2(half, half), center + SIMD2(-half, half),
@@ -127,9 +221,9 @@ final class RoomScanService: IndoorScanServicing {
         }
 
         return IndoorSnapshot(
-            elements: elements + people,
+            elements: room + extra,
             pose: pose,
-            objects: overlayBoxes(camera: camera, imageSize: imageSize, pose: pose) + moving.filter(\.isVisible).map(\.object),
+            objects: overlayBoxes(camera: camera, imageSize: imageSize, pose: pose) + seenOnly.filter(\.isVisible).map(\.object),
             coaching: coaching,
             imageSize: imageSize
         )

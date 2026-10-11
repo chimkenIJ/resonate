@@ -36,6 +36,13 @@ final class IndoorScanViewModel {
     var guidance: String { navigator.guideGuidance ?? scene?.guidance ?? "I'm finding walls, doors, and furniture." }
     var guidanceIcon: Maneuver { navigator.isGuiding ? navigator.guideIcon : (scene?.guidanceIcon ?? .straight) }
     var miniMap: [MiniMapItem] { scene?.miniMap ?? [] }
+
+    /// Other things close by, for the card: "Table 3 steps to your right. Plant 2 steps ahead, on your left."
+    var nearbyText: String? {
+        guard !navigator.isGuiding, let scene else { return nil }
+        let lines = scene.nearby.map { IndoorComposer.describe($0).joined(separator: " ") }.filter { $0 != headline }
+        return lines.isEmpty ? nil : lines.prefix(2).joined(separator: " ")
+    }
     var coaching: String? { snapshot?.coaching }
 
     /// Only what matters is outlined: doors, things in the path, people nearby, and the door being guided to.

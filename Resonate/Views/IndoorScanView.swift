@@ -62,6 +62,14 @@ struct IndoorScanView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if let nearby = model.nearbyText {
+                Label(nearby, systemImage: "dot.radiowaves.left.and.right")
+                    .appFont(.body)
+                    .foregroundStyle(Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Also nearby: \(nearby)")
+            }
+
             if let description = model.roomDescription {
                 Text(description)
                     .appFont(.body)
