@@ -147,7 +147,13 @@ server/          Map server containers and development scripts
 docs/            Backend and map setup guides
 ```
 
-To run the unit tests, select the **Resonate** scheme and an iPhone simulator in Xcode, then press **⌘U**.
+## Testing
+
+Select the **Resonate** scheme and an iPhone simulator in Xcode, then press **⌘U**. The test suite includes navigation logic, preferences, alerts, speech dispatch, indoor descriptions, terrain analysis, and color naming.
+
+For a manual demo check, continue as a guest, complete onboarding, search for a destination, and save a place in a folder. For live testing, verify sign-in and saved-place persistence after backend setup, then check camera tools and feedback on a physical iPhone.
+
+Passing unit tests or trying simulated screens does not establish real-world detection accuracy or route accessibility.
 
 ## Storage and current features
 
