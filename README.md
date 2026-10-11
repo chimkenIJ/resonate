@@ -67,6 +67,8 @@ The deployment target is iOS 17.0. Use a recent Xcode release compatible with th
 
 Without a complete `ResonateConfig.plist`, the app automatically uses mock services. No API keys or backend are needed for this demo. Locations, routes, detection, and feedback are simulated; this mode is for trying the interface.
 
+To confirm demo mode, check the Xcode console for `ResonateConfig.plist missing or incomplete; running on mock services.` If you already configured live services, use a separate checkout without your local configuration file to try the demo.
+
 To run on an iPhone, select your device in Xcode and set your development team under **Signing & Capabilities**. Use an iPhone running iOS 17 or later. Real camera detection needs a physical device, and indoor room scanning needs a supported LiDAR device. The simulator cannot verify camera, LiDAR, or vibration behavior.
 
 ### Search and routing
