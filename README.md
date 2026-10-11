@@ -75,6 +75,20 @@ Select your device in Xcode and set your development team under **Signing & Capa
 
 Real camera detection and color recognition require a physical device and live services. Indoor room scanning also requires supported LiDAR hardware. On phones without LiDAR, obstacle distances use object-size estimates. The simulator cannot validate camera accuracy, LiDAR depth, or vibration behavior.
 
+## Configure live services
+
+### Accounts and saved places
+
+Follow the [backend setup guide](docs/BACKEND_SETUP.md) to configure Auth0, connect Supabase, and apply the database migrations. Then run this command from the repository root on your Mac:
+
+```sh
+cp config/ResonateConfig.example.plist Resonate/Resources/ResonateConfig.plist
+```
+
+Fill in `SupabaseURL`, `SupabaseKey`, `Auth0Domain`, `Auth0ClientID`, and `Auth0Audience`. Use the Supabase publishable or legacy anon key in the app. Keep service-role keys and third-party API secrets on the backend.
+
+The local plist is gitignored. Missing, empty, or `YOUR_` placeholder values in required fields cause the app to use mock services. Rebuild after changing the configuration.
+
 ### Search and routing
 
 Follow [Map server setup](docs/MAP_SERVER.md) for the Georgia OSM import, Valhalla, Nominatim, accessibility data, and the `geocode` and `route` Edge Functions.
