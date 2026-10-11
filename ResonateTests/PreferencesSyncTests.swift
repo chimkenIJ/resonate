@@ -46,6 +46,41 @@ struct PreferencesSyncTests {
         #expect(LocalPreferencesService(fileURL: file).needsSync == false)
     }
 
+    /// Saves arrive in order but the network answers out of order: the account must end up with the newest.
+    final class SlowFirstRemote: PreferencesServicing {
+        var stored: UserPreferences?
+        var saves = 0
+        func load() async -> UserPreferences? { stored }
+        func save(_ preferences: UserPreferences) async throws {
+            saves += 1
+            if saves == 1 { try await Task.sleep(for: .milliseconds(300)) }
+            stored = preferences
+        }
+    }
+
+    @Test func twoQuickChangesBothSurviveARelaunch() async throws {
+        let file = tempFile()
+        let auth = MockAuthService()
+        _ = try await auth.signIn()
+        let remote = SlowFirstRemote()
+        let service = AccountAwarePreferencesService(auth: auth, remote: remote, local: LocalPreferencesService(fileURL: file))
+
+        var stairsOff = UserPreferences()
+        stairsOff.routing.avoidSteps = false
+        var stairsOffAndVoice = stairsOff
+        stairsOffAndVoice.voiceID = "some-voice"
+        async let first: Void = service.save(stairsOff)
+        try await Task.sleep(for: .milliseconds(20))
+        async let second: Void = service.save(stairsOffAndVoice)
+        _ = try await (first, second)
+
+        #expect(remote.stored == stairsOffAndVoice)
+        let relaunched = AccountAwarePreferencesService(auth: auth, remote: remote, local: LocalPreferencesService(fileURL: file))
+        let loaded = try #require(await relaunched.load())
+        #expect(loaded.voiceID == "some-voice")
+        #expect(loaded.routing.avoidSteps == false)
+    }
+
     @Test func syncedPhonesFollowTheAccount() async throws {
         let file = tempFile()
         let auth = MockAuthService()
