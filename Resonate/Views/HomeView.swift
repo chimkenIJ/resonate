@@ -37,12 +37,18 @@ struct HomeView: View {
                 .accessibilityAddTraits(.isHeader)
                 .frame(height: tileHeight == nil ? nil : 40, alignment: .leading)
 
+            // Yellow, green, blue, purple from top to bottom.
             VStack(spacing: 16) {
                 if needs.contains(.gettingAround) {
                     tile("Walk outside", "Warns you about obstacles", "location", .sand, tileHeight) {
                         app.router.cover = .walk(nil)
                     }
-                    tile("Scan indoors", "Finds walls, doors, and things", "viewfinder", .sage, tileHeight) {
+                }
+                tile("Search", "Find a place and get a route there", "magnifyingglass", .sage, tileHeight) {
+                    app.router.openSearch(listen: false)
+                }
+                if needs.contains(.gettingAround) {
+                    tile("Scan indoors", "Finds walls, doors, and things", "viewfinder", .slate, tileHeight) {
                         app.router.cover = .indoor
                     }
                 }
@@ -50,9 +56,6 @@ struct HomeView: View {
                     tile("Name colors", "Point at something to hear its color", "paintpalette", .mauve, tileHeight) {
                         app.router.cover = .colors
                     }
-                }
-                tile("Saved places", "Classes, home, and more", "folder", .slate, tileHeight) {
-                    app.router.tab = .saved
                 }
             }
         }
