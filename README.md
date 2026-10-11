@@ -122,6 +122,8 @@ Local search uses public Nominatim for light personal testing. Use the self-host
 
 Configure `ELEVENLABS_API_KEY` and `GEMINI_API_KEY` as Supabase function secrets, then deploy the `speak` and `describe` functions. For local functions, add the keys to the gitignored `supabase/functions/.env.local` and restart the local services. Optional settings are `ELEVENLABS_VOICE_ID` and `GEMINI_MODEL`.
 
+Obstacle detection and color naming run on the device. A scene-description request sends a camera snapshot to the `describe` backend function for Gemini processing; ElevenLabs speech uses the `speak` function. These remote features require network access. Device speech provides a fallback when remote speech is unavailable.
+
 The YOLO Core ML model is included in `Resonate/Resources/Models/`. See the [model notes](Resonate/Resources/Models/README.md) for export instructions and licensing.
 
 ## Project structure
