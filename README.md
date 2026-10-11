@@ -21,7 +21,9 @@ These features use simulated services in demo mode. Live services require the co
 
 Sign in or continue as a guest → onboarding and preferences → home.
 
-From home, users can search for a destination, follow a walking route, check their surroundings, scan a room, and save places in folders. Signed-in users store saved places and preferences in the backend. Guests keep them on the phone.
+From home, choose a destination for outdoor navigation or open a tool to explore nearby surroundings. Saved places are organized into folders for later use.
+
+With live services configured, signed-in users store saved places and preferences in the backend; guests keep them on the phone. Choosing guest access does not by itself enable demo mode: the app configuration determines whether services are live or simulated.
 
 ## Stack
 
