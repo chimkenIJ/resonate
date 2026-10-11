@@ -21,6 +21,14 @@ struct RouteView: View {
                             .padding(.leading, Metrics.screenPadding)
                             .padding(.top, proxy.safeAreaInsets.top + 8)
                     }
+                    // The assistant's microphone sits over the map, so it never covers the route details.
+                    .overlay(alignment: .topTrailing) {
+                        if app.assistant.isEnabled {
+                            AssistantTalkButton(assistant: app.assistant, diameter: 60)
+                                .padding(.trailing, Metrics.screenPadding)
+                                .padding(.top, proxy.safeAreaInsets.top + 8)
+                        }
+                    }
 
                 SheetCard(style: .anchored) {
                     ScrollView {

@@ -30,18 +30,12 @@ nonisolated final class SpeechClipStore: @unchecked Sendable {
 
 /// The app's voice, from ElevenLabs through the `speak` Edge Function.
 ///
-/// - Requested snapshots interrupt speech and suppress other narration until finished.
-/// - Otherwise, safety interrupts navigation, navigation interrupts info, and phrases queue briefly.
+/// - One voice, one sentence at a time; what's said next is decided by `SpeechQueue` (safety cuts in,
+///   newer messages replace the rest of older ones).
 /// - Safety alerts are built from pre-recorded pieces, so they play with no network wait, even offline.
 /// - If the network is down and a phrase was never recorded, the phone's built-in voice says it
-///   rather than leaving the user in silence.
+///   rather than leaving the user in silence. A message that falls back stays in that voice.
 final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
-    private struct Utterance {
-        let text: String
-        let priority: SpeechPriority
-        let fragments: [String]?
-    }
-
     private let client: EdgeFunctionClient
     private var store = SpeechClipStore()
     private var voiceID: String?
@@ -94,9 +88,12 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
     private var deviceUtterance: AVSpeechUtterance?
     private var player: AVAudioPlayer?
     private var finished: CheckedContinuation<Void, Never>?
-    private var pending: [Utterance] = []
-    private var current: Utterance?
+    private var queue = SpeechQueue()
     private var worker: Task<Void, Never>?
+    /// The next sentence, fetched while the current one plays.
+    private var prefetched: (text: String, task: Task<Data, Error>)?
+    /// The message that fell back to the phone's voice, so its other sentences use it too.
+    private var deviceVoiceMessage: Int?
     private var workerID = UUID()
 
     private(set) var isSpeaking = false
@@ -104,8 +101,6 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
 
     /// Phrases up to this length are kept on the phone after the first time.
     private let cacheLimit = 200
-    /// Don't let the queue fall behind what's happening.
-    private let maxPending = 2
 
     init(client: EdgeFunctionClient) {
         self.client = client
@@ -119,20 +114,17 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
         guard !Task.isCancelled else { return }
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        if current?.priority == .snapshot && priority != .snapshot { return }
-        lastSpoken = text
-        let utterance = Utterance(text: text, priority: priority, fragments: fragments)
-
-        if let current, !(priority > current.priority || (priority == .safety && current.priority == .safety) || priority == .snapshot) {
-            pending.append(utterance)
-            if pending.count > maxPending { pending.removeFirst() }
+        switch queue.enqueue(text, priority: priority, fragments: fragments) {
+        case .ignored:
             return
+        case .interruptNow:
+            cutAudio()
+        case .play:
+            // A voice sample is playing: the app's own speech takes over.
+            if isPreviewing { cutAudio() }
         }
-        // More urgent (or a newer safety alert): cut in now, and drop anything less urgent that was waiting.
-        if current != nil { interrupt() }
-        pending.removeAll { priority == .snapshot || $0.priority < priority }
-        pending.insert(utterance, at: 0)
-        startWorker()
+        lastSpoken = text
+        startWorkerIfIdle()
     }
 
     func waitUntilFinished() async {
@@ -141,8 +133,8 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
 
     func stop() {
         lastSpoken = nil
-        pending.removeAll()
-        interrupt()
+        queue.clear()
+        cutAudio()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
@@ -169,62 +161,92 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
 
     // MARK: Playback queue
 
-    private func startWorker() {
-        worker?.cancel()
+    /// Plays the queue one sentence at a time until it's empty.
+    private func startWorkerIfIdle() {
+        guard worker == nil else { return }
         let id = UUID()
         workerID = id
+        isSpeaking = true
         worker = Task { [weak self] in
-            while let self, !Task.isCancelled, !self.pending.isEmpty {
-                let next = self.pending.removeFirst()
-                self.current = next
-                self.isSpeaking = true
-                await self.play(next)
-                if self.workerID == id { self.current = nil }
+            while let self, !Task.isCancelled, let sentence = self.queue.next() {
+                self.prefetch(self.queue.upcoming)
+                await self.play(sentence)
             }
             guard let self, self.workerID == id else { return }
             self.isSpeaking = false
             self.worker = nil
+            self.deviceVoiceMessage = nil
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
     }
 
-    private func interrupt() {
+    /// Silences whatever is playing right now (the app voice and the phone's voice) without touching the queue.
+    private func cutAudio() {
         worker?.cancel()
         worker = nil
         player?.stop()
         player = nil
         deviceUtterance = nil
-        if deviceVoice.isSpeaking { deviceVoice.stopSpeaking(at: .immediate) }
+        // Always: an utterance that's queued but hasn't started yet doesn't count as speaking,
+        // and would otherwise still be read out after the screen closed.
+        deviceVoice.stopSpeaking(at: .immediate)
         resumeFinished()
-        current = nil
+        prefetched?.task.cancel()
+        prefetched = nil
+        deviceVoiceMessage = nil
         isSpeaking = false
         isPreviewing = false
         workerID = UUID()
     }
 
-    private func play(_ utterance: Utterance) async {
-        if let clip = store.data(for: utterance.text) {
-            await playClips([clip])
+    private func play(_ sentence: SpeechQueue.Sentence) async {
+        if deviceVoiceMessage == sentence.message {
+            await speakOnDevice(sentence.text)
             return
         }
-        if let fragments = utterance.fragments {
-            let clips = fragments.compactMap(store.data(for:))
-            if clips.count == fragments.count {
-                await playClips(clips)
-                return
-            }
+        if let clips = recordedClips(for: sentence) {
+            await playClips(clips)
+            return
         }
         do {
-            // Safety can't wait long: if the voice service is slow, fall back right away.
-            let data = try await fetch(utterance.text, timeout: utterance.priority == .safety ? 2 : 8, voiceID: voiceID)
+            let data: Data
+            if let prefetched, prefetched.text == sentence.text {
+                self.prefetched = nil
+                data = try await prefetched.task.value
+            } else {
+                // Safety can't wait long: if the voice service is slow, fall back right away.
+                data = try await fetch(sentence.text, timeout: sentence.priority == .safety ? 2 : 8, voiceID: voiceID)
+            }
             if Task.isCancelled { return }
-            if utterance.text.count <= cacheLimit { store.store(data, for: utterance.text) }
+            if sentence.text.count <= cacheLimit { store.store(data, for: sentence.text) }
             await playClips([data])
         } catch {
             if Task.isCancelled { return }
             Log.speech.error("ElevenLabs unavailable, using the device voice: \(String(describing: error), privacy: .public)")
-            await speakOnDevice(utterance.text)
+            deviceVoiceMessage = sentence.message
+            await speakOnDevice(sentence.text)
         }
+    }
+
+    /// The sentence from clips already on the phone (whole, or from its pre-recorded pieces).
+    private func recordedClips(for sentence: SpeechQueue.Sentence) -> [Data]? {
+        if let clip = store.data(for: sentence.text) { return [clip] }
+        guard let fragments = sentence.fragments else { return nil }
+        let clips = fragments.compactMap(store.data(for:))
+        return clips.count == fragments.count ? clips : nil
+    }
+
+    /// Starts fetching the next sentence so it plays without a gap.
+    private func prefetch(_ sentence: SpeechQueue.Sentence?) {
+        guard let sentence, prefetched?.text != sentence.text, deviceVoiceMessage != sentence.message,
+              recordedClips(for: sentence) == nil else { return }
+        prefetched?.task.cancel()
+        let voiceID = voiceID
+        let timeout: TimeInterval = sentence.priority == .safety ? 2 : 8
+        prefetched = (sentence.text, Task { [weak self] in
+            guard let self else { throw CancellationError() }
+            return try await self.fetch(sentence.text, timeout: timeout, voiceID: voiceID)
+        })
     }
 
     private func playClips(_ clips: [Data]) async {

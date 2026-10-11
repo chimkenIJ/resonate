@@ -144,6 +144,16 @@ struct VoiceAssistantTests {
         #expect(app.router.cover == .scanArea)
     }
 
+    @Test func leavingTheScreenYourselfStopsTheAssistant() async throws {
+        let app = makeApp(assistant: ScriptedAssistant())
+        app.assistant.start(with: "What's on my screen?")
+        #expect(app.assistant.isActive)
+
+        app.router.tab = .settings // the user taps a tab
+
+        #expect(!app.assistant.isActive)
+    }
+
     @Test func contentBlocksRoundTrip() throws {
         let text = #"{"input":{"place_id":"osm:node:1"},"signature":"abc/def","type":"tool_use","n":3}"#
         let value = try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))

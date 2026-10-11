@@ -15,7 +15,7 @@ final class AppModel {
     let router: AppRouter
     /// Shared by the Search tab and the voice assistant, so the assistant's searches show there.
     let search: DestinationSearchViewModel
-    let assistant = VoiceAssistant()
+    let assistant: VoiceAssistant
     /// The open camera screen that can describe the scene (walk, navigation, scan the area),
     /// so the assistant can describe without leaving it.
     weak var sceneDescriber: (any SceneDescribing)?
@@ -40,7 +40,13 @@ final class AppModel {
             preferences: UserPreferences()
         )
         self.feedback = feedback
-        self.router = AppRouter { feedback.endScreenSpeech() }
+        let assistant = VoiceAssistant()
+        self.assistant = assistant
+        // Leaving a screen silences it, and the assistant unless it made the move itself.
+        self.router = AppRouter { [weak assistant] in
+            feedback.endScreenSpeech()
+            assistant?.screenChanged()
+        }
         self.search = DestinationSearchViewModel(services: services)
         assistant.attach(to: self)
     }
