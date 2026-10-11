@@ -33,6 +33,7 @@ With live services configured, signed-in users store saved places and preference
 | Object detection | Apple Vision and Core ML running YOLO11s on the device |
 | Distance | ARKit LiDAR where available; object-size estimates on non-LiDAR phones |
 | Indoor scanning | Apple RoomPlan with LiDAR |
+| Color recognition | AVFoundation camera sampling and on-device color naming |
 | Maps and outdoor routes | MapKit for display, OpenStreetMap data, Nominatim search, and Valhalla walking routes |
 | Feedback | ElevenLabs voice, AVSpeechSynthesizer as an offline fallback, Core Haptics, and audio cues |
 | Scene descriptions | Gemini through a backend function, requested by the user |
