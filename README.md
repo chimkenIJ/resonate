@@ -40,6 +40,8 @@ With live services configured, signed-in users store saved places and preference
 | Authentication | Auth0 |
 | Backend | Supabase Postgres/PostGIS and Edge Functions |
 
+## Geographic coverage
+
 Outdoor search, routing, and accessibility features are scoped to Atlanta and Georgia using OpenStreetMap data. The map server imports the Georgia extract, including tags for crossings, curb ramps, tactile paving, steps, and other accessibility features. MapKit supplies the map display.
 
 The current region checks use a Georgia bounding box, which includes small parts of neighboring states. See the [backend setup guide](docs/BACKEND_SETUP.md#2e-exact-georgia-border-optional) for loading the exact state boundary.
