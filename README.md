@@ -1,16 +1,29 @@
 # Resonate
 
-Resonate is an AI-powered accessibility app that helps people with disabilities navigate and understand their surroundings.
+Resonate is an iOS accessibility prototype that helps blind and low-vision users explore their surroundings through obstacle detection, spoken feedback, vibration cues, and walking routes with accessibility information.
 
-The initial focus is blind and low-vision users. The app combines obstacle detection, spoken feedback, vibration cues, and walking routes with accessibility information. It supports outdoor navigation and indoor room scanning, with room to add tools for other needs, including color recognition.
+The app brings outdoor navigation and indoor room scanning into one interface, with preferences for how users receive feedback. Outdoor search and routing currently focus on Atlanta and Georgia; indoor room scanning requires a supported LiDAR iPhone.
 
-Everyday navigation can be difficult when crossings, sidewalks, entrances, and obstacles aren't clearly described. Resonate brings that information into one app and lets users choose the feedback and routing preferences that work for them.
+Resonate is a prototype intended to supplement a cane or guide dog. Detection and map information can be incomplete, and distance estimates are approximate. See [Limits](#limits) before trying the app.
+
+## Features
+
+- **Explore surroundings:** detect supported objects and provide distance estimates with speech, vibration, and audio cues.
+- **Find a destination:** search places and follow walking routes informed by available accessibility tags.
+- **Scan a room:** use RoomPlan on a supported LiDAR iPhone.
+- **Describe a scene:** request a camera-based description through Gemini.
+- **Recognize colors:** name colors sampled from the center of the camera view.
+- **Save places:** organize destinations in folders and choose feedback preferences.
+
+These features use simulated services in demo mode. Live services require the configuration below.
 
 ## App flow
 
 Sign in or continue as a guest → onboarding and preferences → home.
 
-From home, users can search for a destination, follow a walking route, check their surroundings, scan a room, and save places in folders. Signed-in users store saved places and preferences in the backend. Guests keep them on the phone.
+From home, choose a destination for outdoor navigation or open a tool to explore nearby surroundings. Saved places are organized into folders for later use.
+
+With live services configured, signed-in users store saved places and preferences in the backend; guests keep them on the phone. Choosing guest access does not by itself enable demo mode: the app configuration determines whether services are live or simulated.
 
 ## Stack
 
@@ -20,19 +33,31 @@ From home, users can search for a destination, follow a walking route, check the
 | Object detection | Apple Vision and Core ML running YOLO11s on the device |
 | Distance | ARKit LiDAR where available; object-size estimates on non-LiDAR phones |
 | Indoor scanning | Apple RoomPlan with LiDAR |
+| Color recognition | AVFoundation camera sampling and on-device color naming |
 | Maps and outdoor routes | MapKit for display, OpenStreetMap data, Nominatim search, and Valhalla walking routes |
 | Feedback | ElevenLabs voice, AVSpeechSynthesizer as an offline fallback, Core Haptics, and audio cues |
 | Scene descriptions | Gemini through a backend function, requested by the user |
 | Authentication | Auth0 |
 | Backend | Supabase Postgres/PostGIS and Edge Functions |
 
+## Geographic coverage
+
 Outdoor search, routing, and accessibility features are scoped to Atlanta and Georgia using OpenStreetMap data. The map server imports the Georgia extract, including tags for crossings, curb ramps, tactile paving, steps, and other accessibility features. MapKit supplies the map display.
 
 The current region checks use a Georgia bounding box, which includes small parts of neighboring states. See the [backend setup guide](docs/BACKEND_SETUP.md#2e-exact-georgia-border-optional) for loading the exact state boundary.
 
-## Run the demo
+## Requirements
 
-You need a Mac with Xcode and either an iPhone or an iOS simulator. The deployment target is iOS 17.0; use a recent Xcode release compatible with the project's Swift syntax.
+| Goal | Requirements |
+| --- | --- |
+| Explore the demo interface | Mac, compatible Xcode release, and an iPhone simulator or iPhone |
+| Try live camera tools | Physical iPhone running iOS 17 or later, camera permission, and live app configuration |
+| Scan indoor rooms | Supported LiDAR iPhone |
+| Run local routing services | Mac with Docker Desktop, Node.js/npm, and Python 3 |
+
+The deployment target is iOS 17.0. Use a recent Xcode release compatible with the project's Swift syntax; the minimum iOS version does not specify the required Xcode version.
+
+## Run the demo
 
 1. Clone this repository and open `Resonate.xcodeproj` in Xcode.
 2. Let Xcode resolve the Swift packages. If needed, use **File → Packages → Resolve Package Versions**.
@@ -42,13 +67,33 @@ You need a Mac with Xcode and either an iPhone or an iOS simulator. The deployme
 
 Without a complete `ResonateConfig.plist`, the app automatically uses mock services. No API keys or backend are needed for this demo. Locations, routes, detection, and feedback are simulated; this mode is for trying the interface.
 
-To run on an iPhone, select your device in Xcode and set your development team under **Signing & Capabilities**. Use an iPhone running iOS 17 or later. Real camera detection needs a physical device, and indoor room scanning needs a supported LiDAR device. The simulator cannot verify camera, LiDAR, or vibration behavior.
+To confirm demo mode, check the Xcode console for `ResonateConfig.plist missing or incomplete; running on mock services.` If you already configured live services, use a separate checkout without your local configuration file to try the demo.
+
+### Run on an iPhone
+
+Select your device in Xcode and set your development team under **Signing & Capabilities**, then build and run. Grant camera and location access when using the corresponding tools.
+
+Real camera detection and color recognition require a physical device and live services. Indoor room scanning also requires supported LiDAR hardware. On phones without LiDAR, obstacle distances use object-size estimates. The simulator cannot validate camera accuracy, LiDAR depth, or vibration behavior.
+
+## Configure live services
+
+### Accounts and saved places
+
+Follow the [backend setup guide](docs/BACKEND_SETUP.md) to configure Auth0, connect Supabase, and apply the database migrations. Then run this command from the repository root on your Mac:
+
+```sh
+cp config/ResonateConfig.example.plist Resonate/Resources/ResonateConfig.plist
+```
+
+Fill in `SupabaseURL`, `SupabaseKey`, `Auth0Domain`, `Auth0ClientID`, and `Auth0Audience`. Use the Supabase publishable or legacy anon key in the app. Keep service-role keys and third-party API secrets on the backend.
+
+The local plist is gitignored. Missing, empty, or `YOUR_` placeholder values in required fields cause the app to use mock services. Rebuild after changing the configuration.
 
 ### Search and routing
 
 Follow [Map server setup](docs/MAP_SERVER.md) for the Georgia OSM import, Valhalla, Nominatim, accessibility data, and the `geocode` and `route` Edge Functions.
 
-For local testing, install Docker Desktop, Node.js/npm, and Python 3. With the account configuration above completed, create `supabase/functions/.env.local` containing:
+For local testing on your Mac, install Docker Desktop, Node.js/npm, and Python 3. Complete [account configuration](#accounts-and-saved-places) first, then create `supabase/functions/.env.local` containing:
 
 ```dotenv
 VALHALLA_URL=http://host.docker.internal:8002
@@ -77,6 +122,8 @@ Local search uses public Nominatim for light personal testing. Use the self-host
 
 Configure `ELEVENLABS_API_KEY` and `GEMINI_API_KEY` as Supabase function secrets, then deploy the `speak` and `describe` functions. For local functions, add the keys to the gitignored `supabase/functions/.env.local` and restart the local services. Optional settings are `ELEVENLABS_VOICE_ID` and `GEMINI_MODEL`.
 
+Obstacle detection and color naming run on the device. A scene-description request sends a camera snapshot to the `describe` backend function for Gemini processing; ElevenLabs speech uses the `speak` function. These remote features require network access. Device speech provides a fallback when remote speech is unavailable.
+
 ### Voice assistant
 
 The floating microphone talks to Claude through the `assistant` Edge Function. Configure `ANTHROPIC_API_KEY` as a Supabase function secret and deploy `assistant`. Keys that aren't scoped to a workspace also need `ANTHROPIC_WORKSPACE_ID`. Optional settings are `ANTHROPIC_MODEL` (default `claude-opus-5-5`) and `ANTHROPIC_EFFORT` (default `low`, for quick spoken replies). Turn the assistant on under **Settings → Voice assistant**, or say "Talk to Resonate" to Siri. Without a backend, a scripted mock handles simple requests such as "find Kroger" or "open saved places".
@@ -97,21 +144,42 @@ Resonate/
   Theme/          Colors, typography, and spacing
   Resources/      Fonts, Core ML model, and local configuration
 ResonateTests/    Unit tests
+config/          Example app configuration
+auth0/           Auth0 login action
 supabase/        Database migrations and Edge Functions
 server/          Map server containers and development scripts
 docs/            Backend and map setup guides
 ```
 
-To run the unit tests, select the **Resonate** scheme and an iPhone simulator in Xcode, then press **⌘U**.
+## Testing
 
-## Storage and current features
+Select the **Resonate** scheme and an iPhone simulator in Xcode, then press **⌘U**. The test suite includes navigation logic, preferences, alerts, speech dispatch, indoor descriptions, terrain analysis, and color naming.
 
-Supabase stores user profiles, saved places, folders, preferences, and OSM accessibility points. The `saved_routes` table stores saved destinations rather than complete route histories. Routing runs on the separate Valhalla server.
+For a manual demo check, continue as a guest, complete onboarding, search for a destination, and save a place in a folder. For live testing, verify sign-in and saved-place persistence after backend setup, then check camera tools and feedback on a physical iPhone.
 
-Color recognition currently uses a mock service. On non-LiDAR phones, obstacle distances are estimated from object size; indoor room scanning requires LiDAR.
+Passing unit tests or trying simulated screens does not establish real-world detection accuracy or route accessibility.
+
+## Storage and feature status
+
+With live services configured, Supabase stores signed-in user profiles, saved places, folders, and preferences. Guest saved places and preferences stay on the phone. The `saved_routes` table stores saved destinations rather than complete route histories.
+
+OSM accessibility points are stored in Supabase, while route calculation runs on the separate Valhalla server. In the local development setup, account data remains in hosted Supabase and routing functions use the local stack.
+
+Color recognition has a live, on-device implementation that samples the center of the camera image. Its output depends on lighting and what is inside the aiming area. Demo mode uses mock color readings, as it does for the other services.
 
 ## Limits
 
-OSM accessibility coverage varies, and a route may still include steps or unverified crossings. Camera detection can miss objects, and non-LiDAR distance estimates are approximate. Resonate is a prototype that supplements a cane or guide dog; it does not replace them.
+- **Routing:** OSM accessibility coverage varies. A suggested route may include steps, missing curb information, or unverified crossings.
+- **Detection:** camera detection can miss objects. Object-size distance estimates are approximate and depend on the detected object and its visible size.
+- **Hardware:** indoor room scanning needs supported LiDAR hardware; simulator behavior does not validate physical sensors or feedback.
+- **Connectivity:** remote search, routing, and scene descriptions depend on available services and network access.
+
+Resonate is a prototype that supplements a cane or guide dog; it does not replace them. This README does not claim measured navigation or detection accuracy.
+
+## Documentation
+
+- [Backend setup](docs/BACKEND_SETUP.md): Auth0, Supabase, app configuration, and account troubleshooting.
+- [Map server setup](docs/MAP_SERVER.md): map imports, routing, geocoding, and accessibility data.
+- [Model notes](Resonate/Resources/Models/README.md): YOLO export instructions and licensing.
 
 Map data: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
