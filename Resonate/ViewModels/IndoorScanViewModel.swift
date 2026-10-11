@@ -8,11 +8,15 @@ import Observation
 /// the room map together with what the camera sees now (IndoorMap), measured from where the user is
 /// going: the way they're walking, or where the phone faces when they stand still. Quiet unless
 /// something changed (see IndoorNavigator).
+///
+/// The card shows exactly what was last said, nothing else: every line goes through `speak`.
 @Observable
 final class IndoorScanViewModel {
     private(set) var snapshot: IndoorSnapshot?
     private(set) var scene: IndoorComposer.Result?
-    /// A camera description (the room, or how to open a door); cleared a few seconds after it's read.
+    /// What was last said, word for word: the card's text.
+    private(set) var shownText = ""
+    /// The last camera description (the room, or how to open a door).
     private(set) var roomDescription: String?
     private(set) var isDescribing = false
     private(set) var cameraAvailable = true
@@ -42,19 +46,9 @@ final class IndoorScanViewModel {
     var isSupported: Bool { scanner.isSupported }
     var previewSource: CameraPreviewSource { scanner.previewSource }
     var unsupportedMessage: String { AppError.unsupportedDevice(feature: "Scanning indoors").spokenMessage }
-    var headline: String {
-        if !cameraAvailable { return "Camera is off." }
-        if isMapping { return "Mapping the room." }
-        return scene?.headline ?? "Mapping the room."
-    }
-    /// What's in front, left to right.
-    var guidance: String {
-        if isMapping { return "Turn slowly in a full circle. \(Int(map.coverage * 100))% done." }
-        return scene?.guidance ?? "I'm finding walls, doors, and furniture."
-    }
-    var guidanceIcon: Maneuver { isMapping ? .uTurn : .straight }
+    /// The card's text: exactly what was last said.
+    var headline: String { shownText }
     var miniMap: [MiniMapItem] { scene?.miniMap ?? [] }
-    var coaching: String? { snapshot?.coaching }
 
     /// Only what matters is outlined: doors, things in the path, people nearby, and the door being guided to.
     /// Nothing while mapping.
@@ -66,18 +60,17 @@ final class IndoorScanViewModel {
     func run() async {
         let generation = feedback.screenGeneration
         guard scanner.isSupported else {
-            await feedback.announce(unsupportedMessage, priority: .info)
+            await speak(unsupportedMessage, priority: .info)
             return
         }
         let granted = await scanner.requestPermission()
         guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
         guard granted else {
             cameraAvailable = false
-            await feedback.announce(AppError.permissionDenied(.camera).spokenMessage, priority: .info)
+            await speak(AppError.permissionDenied(.camera).spokenMessage, priority: .info)
             return
         }
-        await feedback.announce("Indoors. Stand still, hold the phone up, and turn slowly in a full circle, so I can map the room.",
-                                priority: .navigation)
+        await speak("Indoors. Stand still, hold the phone up, and turn slowly in a full circle, so I can map the room.")
 
         for await next in scanner.snapshots() {
             guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
@@ -94,17 +87,17 @@ final class IndoorScanViewModel {
                 if mappingStarted == nil { mappingStarted = now }
                 if map.coverage >= Self.mappedCoverage || elapsed >= Self.mappingTimeout {
                     isMapping = false
-                    await feedback.say(["Room mapped."])
+                    await speak("Room mapped.")
                 } else if !saidKeepTurning, elapsed >= 12, map.coverage < 0.5 {
                     saidKeepTurning = true
-                    await feedback.say(["Keep turning slowly."])
+                    await speak("Keep turning slowly.")
                 }
             }
 
-            // Scanning tips stay on screen; only "too dark" is worth saying, once.
+            // Of the scanning tips, only "too dark" is worth saying, once.
             if let tip = next.coaching, tip.contains("dark"), !saidDarkTip {
                 saidDarkTip = true
-                await feedback.announce(tip, priority: .info)
+                await speak(tip, priority: .info)
             }
 
             // Nothing about obstacles until the map is ready.
@@ -118,9 +111,10 @@ final class IndoorScanViewModel {
     private func handle(_ output: IndoorNavigator.Output) async {
         switch output {
         case .urgent(let alert):
+            shownText = alert.spokenText
             await feedback.deliverUrgent(alert)
-        case .say(let fragments):
-            await feedback.say(fragments)
+        case .say(let pieces):
+            await speak(pieces.joined(separator: " "))
         case .describeDoor, .lookForDoor:
             // The camera description says where a door is, or how to open the one in front.
             await describe(.door, intro: nil, failure: nil)
@@ -132,7 +126,7 @@ final class IndoorScanViewModel {
     /// Where the doors are (ends mapping early if it's still going).
     func findDoor() async {
         guard let scene else {
-            await feedback.say(["I'm still scanning.", "Turn slowly in a full circle."])
+            await speak("I'm still scanning. Turn slowly in a full circle.")
             return
         }
         isMapping = false
@@ -142,16 +136,10 @@ final class IndoorScanViewModel {
         }
     }
 
+    /// Says the card's text again.
     func repeatLast() async {
-        if isMapping {
-            await feedback.say(["Keep turning slowly."])
-        } else if let roomDescription {
-            await feedback.announce(roomDescription, priority: .snapshot)
-        } else if let scene {
-            await feedback.say(scene.summary, priority: .info)
-        } else {
-            await feedback.repeatLast()
-        }
+        guard !shownText.isEmpty else { return }
+        await speak(shownText, priority: .info)
     }
 
     func describeRoom() async {
@@ -165,7 +153,7 @@ final class IndoorScanViewModel {
         let generation = feedback.screenGeneration
         if let intro {
             feedback.stopSpeech()
-            await feedback.announce(intro, priority: .info)
+            await speak(intro, priority: .info)
         } else {
             // Let the current sentence ("You're at the door…") finish first.
             for _ in 0..<30 where feedback.isSpeaking { try? await Task.sleep(for: .milliseconds(200)) }
@@ -176,19 +164,19 @@ final class IndoorScanViewModel {
             // Left the screen while waiting: say nothing.
             guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
             roomDescription = text
-            await feedback.announce(text, priority: .snapshot)
-            Task { await clearDescription(text) }
+            await speak(text, priority: .snapshot)
         } catch {
             guard generation == feedback.screenGeneration, !Task.isCancelled else { return }
-            if let failure { await feedback.announce(failure, priority: .info) }
+            if let failure { await speak(failure, priority: .info) }
         }
     }
 
-    /// Clears the description from the screen a few seconds after it's been read out.
-    private func clearDescription(_ text: String) async {
-        try? await Task.sleep(for: .milliseconds(500))
-        for _ in 0..<600 where feedback.isSpeaking { try? await Task.sleep(for: .milliseconds(200)) }
-        try? await Task.sleep(for: .seconds(4))
-        if roomDescription == text { roomDescription = nil }
+    /// Says `text` as whole sentences (pieces recorded separately could drop a word, like the number
+    /// in "4 steps") and shows exactly that on the card. Whatever was playing stops first, so the card
+    /// and the voice change at the same moment. (Automatic updates only come when nothing is playing.)
+    private func speak(_ text: String, priority: SpeechPriority = .navigation) async {
+        feedback.stopSpeech()
+        shownText = text
+        await feedback.announce(text, priority: priority)
     }
 }

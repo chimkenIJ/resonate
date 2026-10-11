@@ -8,7 +8,9 @@ import simd
 /// - What's in front ("Couch 3 steps ahead, on your left. Table 2 steps straight ahead."), but only
 ///   what hasn't been said: something already mentioned isn't repeated while it's still around, or
 ///   until it's been out of sight for `repeatAfter`. The same spot counts as the same thing, whatever
-///   the scan calls it this time. At most every `summaryInterval` seconds, never over other speech.
+///   the scan calls it this time. No name twice within `nameGap`, even for two different things
+///   (two chairs: one "Chair"). At most every `summaryInterval` seconds, never over other speech; a
+///   "Stop" counts as an update.
 /// - The room's size and door count once, when it's known.
 /// - "Find door": where the doors are; how to open a closed one right in front.
 /// Pure logic, easy to test.
@@ -23,7 +25,9 @@ nonisolated struct IndoorNavigator {
         case lookForDoor
     }
 
-    static let summaryInterval: TimeInterval = 3
+    static let summaryInterval: TimeInterval = 5
+    /// The same name isn't said again within this time, whatever it's attached to.
+    static let nameGap: TimeInterval = 10
     /// The same kind of danger doesn't get another "Stop" until it's been gone this long.
     static let urgentCooldown: TimeInterval = 8
     /// A closed door this close is "the door in front": say how to open it.
@@ -38,6 +42,8 @@ nonisolated struct IndoorNavigator {
     private var startedAt: Date?
     private var lastSummaryAt: Date = .distantPast
     private var urgentSaid: [String: Date] = [:]
+    /// Names said lately (lowercased), and when.
+    private var namesSaid: [String: Date] = [:]
     /// Things already said (world X/Z), and when each was last in front of the user.
     private var mentioned: [(center: SIMD2<Double>, seen: Date)] = []
     /// Spots already called out with "Stop".
@@ -45,15 +51,13 @@ nonisolated struct IndoorNavigator {
     private(set) var overviewSaid = false
 
     mutating func update(_ scene: IndoorComposer.Result, canSpeak: Bool, now: Date) -> [Output] {
-        if startedAt == nil {
-            startedAt = now
-            lastSummaryAt = now // first update after the welcome, not on top of it
-        }
+        if startedAt == nil { startedAt = now }
         var outputs: [Output] = []
 
         mentioned.removeAll { now.timeIntervalSince($0.seen) > Self.repeatAfter }
         stopped.removeAll { now.timeIntervalSince($0.seen) > Self.urgentCooldown }
         urgentSaid = urgentSaid.filter { now.timeIntervalSince($0.value) < Self.urgentCooldown }
+        namesSaid = namesSaid.filter { now.timeIntervalSince($0.value) < Self.nameGap }
 
         // "Stop": once per kind of danger and per spot, again only after it's been gone a while.
         if let alert = scene.alert {
@@ -61,6 +65,9 @@ nonisolated struct IndoorNavigator {
             let sameSpot = spot.flatMap { Self.index(near: $0, in: stopped) }
             if urgentSaid[alert.dedupeKey] == nil, sameSpot == nil {
                 outputs.append(.urgent(alert))
+                // It counts as this update.
+                lastSummaryAt = now
+                if let name = scene.alertLabel { namesSaid[name.lowercased()] = now }
                 if let spot {
                     stopped.append((spot, now))
                     // It's been said; the next update shouldn't mention it again.
@@ -72,25 +79,31 @@ nonisolated struct IndoorNavigator {
         }
 
         // Once: how big the room is and how many doors.
-        if !overviewSaid, canSpeak, let size = scene.roomSize, now.timeIntervalSince(startedAt ?? now) >= 4 {
+        if !overviewSaid, canSpeak, let size = scene.roomSize, now.timeIntervalSince(lastSummaryAt) >= Self.summaryInterval {
             overviewSaid = true
             lastSummaryAt = now
             return outputs + [.say([Self.overview(size: size, doors: scene.doors.count)])]
         }
 
-        // What's in front that hasn't been said. Anything already said stays quiet while it's still there.
+        // What's in front that hasn't been said. Anything already said stays quiet while it's still there,
+        // and a name said lately isn't said again, even for something else.
         var fresh: [IndoorComposer.Placed] = []
+        var names = Set<String>()
         for item in scene.nearby {
             let center = IndoorComposer.worldCenter(of: item.element)
             if let index = Self.index(near: center, in: mentioned) {
                 mentioned[index].seen = now
-            } else {
-                fresh.append(item)
+                continue
             }
+            let name = item.element.label.lowercased()
+            guard namesSaid[name] == nil, !names.contains(name) else { continue }
+            names.insert(name)
+            fresh.append(item)
         }
         guard canSpeak, !fresh.isEmpty, now.timeIntervalSince(lastSummaryAt) >= Self.summaryInterval else { return outputs }
         lastSummaryAt = now
         mentioned += fresh.map { (IndoorComposer.worldCenter(of: $0.element), now) }
+        for name in names { namesSaid[name] = now }
         let said = fresh.flatMap { IndoorComposer.describe($0) + (IndoorComposer.isClosedDoor($0) ? ["It's closed."] : []) }
         return outputs + [.say(said)]
     }

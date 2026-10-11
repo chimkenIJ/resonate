@@ -61,8 +61,10 @@ nonisolated enum IndoorComposer {
         var miniMap: [MiniMapItem]
         /// Something right in front of the user (stairs a little sooner): interrupt.
         var alert: ObstacleAlert?
-        /// Where that is (world X/Z), so the same thing isn't called out twice under another name.
+        /// Where that is (world X/Z), so the same thing isn't called out twice under another name,
+        /// and what it's called.
         var alertPosition: SIMD2<Double>?
+        var alertLabel: String?
         /// The short spoken update, in pre-recorded pieces…
         var summary: [String]
         /// …and a key that changes only when the update meaningfully changes, not with every step.
@@ -145,6 +147,7 @@ nonisolated enum IndoorComposer {
             miniMap: placed.compactMap(mapItem),
             alert: stop,
             alertPosition: stopItem.map { worldCenter(of: $0.element) },
+            alertLabel: stopItem?.element.label,
             summary: summary,
             summaryKey: key,
             doors: doors,

@@ -110,7 +110,9 @@ struct IndoorMappingTests {
         task.cancel()
         #expect(model.isMapping)
         #expect(model.overlayObjects.isEmpty)
-        #expect(model.headline == "Mapping the room.")
+        // The card shows exactly what was said.
+        #expect(model.headline == "Indoors. Stand still, hold the phone up, and turn slowly in a full circle, so I can map the room.")
+        #expect(model.headline == speech.log.last?.text)
         #expect(speech.log.map(\.text).allSatisfy { $0.hasPrefix("Indoors.") })
         #expect(!speech.log.contains { $0.priority == .safety })
     }

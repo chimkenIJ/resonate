@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Getting around indoors ("Indoors" mockup): what's in the way, where the doors are, and guidance to a door.
+/// Getting around indoors ("Indoors" mockup): what's in front and where the doors are. The card's text
+/// is exactly what was last said.
 struct IndoorScanView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model: IndoorScanViewModel
@@ -59,21 +60,6 @@ struct IndoorScanView: View {
                     .appFont(.indoorHeadline)
                     .foregroundStyle(Palette.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let description = model.roomDescription {
-                Text(description)
-                    .appFont(.body)
-                    .foregroundStyle(Palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            GuidanceRow(text: model.guidance, systemImage: model.guidanceIcon.systemImage, accent: .sand)
-
-            if let coaching = model.coaching {
-                Label(coaching, systemImage: "lightbulb")
-                    .appFont(.footnote)
-                    .foregroundStyle(Palette.textMuted)
             }
 
             // The main job indoors: getting to a door. Always here.

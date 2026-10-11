@@ -197,9 +197,8 @@ struct IndoorNavigatorTests {
     @Test func staysQuietWhenNothingChanges() {
         var navigator = IndoorNavigator()
         let scene = IndoorComposer.compose([object("Chair", ahead: 2, right: 0)], pose: pose)
-        #expect(said(navigator.update(scene, canSpeak: true, now: start)).isEmpty)
-        #expect(said(navigator.update(scene, canSpeak: true, now: start.addingTimeInterval(5))) == ["Chair 3 steps straight ahead."])
-        for t in stride(from: 6.0, through: 60, by: 1) {
+        #expect(said(navigator.update(scene, canSpeak: true, now: start)) == ["Chair 3 steps straight ahead."])
+        for t in stride(from: 1.0, through: 60, by: 1) {
             #expect(said(navigator.update(scene, canSpeak: true, now: start.addingTimeInterval(t))).isEmpty)
         }
     }
@@ -219,8 +218,7 @@ struct IndoorNavigatorTests {
         var navigator = IndoorNavigator()
         let couch = object("Couch", ahead: 2.5, right: -1.5, size: 1)
         let table = object("Table", ahead: 2, right: 0)
-        _ = navigator.update(IndoorComposer.compose([couch, table], pose: pose), canSpeak: true, now: start)
-        #expect(said(navigator.update(IndoorComposer.compose([couch, table], pose: pose), canSpeak: true, now: start.addingTimeInterval(3)))
+        #expect(said(navigator.update(IndoorComposer.compose([couch, table], pose: pose), canSpeak: true, now: start))
             == ["Couch 3 steps ahead, on your left. Table 3 steps straight ahead."])
         // Turning a little: the same things on other sides aren't news.
         let turned = FloorPose(position: .zero, forward: simd_normalize(SIMD2(-0.3, -1)))
@@ -233,6 +231,27 @@ struct IndoorNavigatorTests {
         let chair = object("Chair", ahead: 2.5, right: 1.5)
         #expect(said(navigator.update(IndoorComposer.compose([couch, table, chair], pose: pose), canSpeak: true, now: start.addingTimeInterval(15)))
             == ["Chair 4 steps ahead, on your right."])
+    }
+
+    @Test func updatesAtMostEveryFiveSeconds() {
+        var navigator = IndoorNavigator()
+        let couch = object("Couch", ahead: 2.5, right: -1.5, size: 1)
+        _ = navigator.update(IndoorComposer.compose([couch], pose: pose), canSpeak: true, now: start)
+        let chair = object("Chair", ahead: 2.5, right: 1.5)
+        // Something new 2 seconds later waits until 5 seconds have passed.
+        #expect(said(navigator.update(IndoorComposer.compose([couch, chair], pose: pose), canSpeak: true, now: start.addingTimeInterval(2))).isEmpty)
+        #expect(said(navigator.update(IndoorComposer.compose([couch, chair], pose: pose), canSpeak: true, now: start.addingTimeInterval(5))) == ["Chair 4 steps ahead, on your right."])
+    }
+
+    @Test func aNameIsntSaidTwiceWithinTenSeconds() {
+        var navigator = IndoorNavigator()
+        let left = object("Chair", ahead: 2.5, right: -1.5)
+        let right = object("Chair", ahead: 2.5, right: 1.5)
+        // Two chairs at once: one "Chair".
+        #expect(said(navigator.update(IndoorComposer.compose([left, right], pose: pose), canSpeak: true, now: start)) == ["Chair 4 steps ahead, on your left."])
+        #expect(said(navigator.update(IndoorComposer.compose([left, right], pose: pose), canSpeak: true, now: start.addingTimeInterval(5))).isEmpty)
+        // Ten seconds on, the other chair can be mentioned.
+        #expect(said(navigator.update(IndoorComposer.compose([left, right], pose: pose), canSpeak: true, now: start.addingTimeInterval(10))) == ["Chair 4 steps ahead, on your right."])
     }
 
     @Test func stopIsSaidOnce() {
