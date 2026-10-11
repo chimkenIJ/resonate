@@ -93,7 +93,7 @@ The local plist is gitignored. Missing, empty, or `YOUR_` placeholder values in 
 
 Follow [Map server setup](docs/MAP_SERVER.md) for the Georgia OSM import, Valhalla, Nominatim, accessibility data, and the `geocode` and `route` Edge Functions.
 
-For local testing, install Docker Desktop, Node.js/npm, and Python 3. With the account configuration above completed, create `supabase/functions/.env.local` containing:
+For local testing on your Mac, install Docker Desktop, Node.js/npm, and Python 3. Complete [account configuration](#accounts-and-saved-places) first, then create `supabase/functions/.env.local` containing:
 
 ```dotenv
 VALHALLA_URL=http://host.docker.internal:8002
