@@ -50,6 +50,39 @@ struct TerrainAnalyzerTests {
         #expect(abs(step.distance - 2.4) <= 0.3)
     }
 
+    /// Risers of 17 cm every 28 cm, starting `at` meters ahead.
+    private func stairs(at start: Double, up: Bool, count: Int = 8) -> (Double) -> Double {
+        { forward in
+            guard forward >= start else { return chest }
+            let steps = min(Double(count), floor((forward - start) / 0.28) + 1)
+            return chest + (up ? 1 : -1) * 0.17 * steps
+        }
+    }
+
+    @Test func findsStairsGoingUp() throws {
+        let findings = TerrainAnalyzer.analyze(ground(stairs(at: 2, up: true)))
+        let found = try #require(findings.first { $0.kind == .stairsUp })
+        #expect(abs(found.distance - 2) <= 0.4)
+        // The rising steps aren't also called an obstacle.
+        #expect(!findings.contains { $0.kind == .obstacle })
+        #expect(TerrainAnalyzer.objects(from: findings).first?.label == "Stairs going up")
+    }
+
+    @Test func findsStairsGoingDown() throws {
+        let findings = TerrainAnalyzer.analyze(ground(stairs(at: 2.2, up: false)))
+        #expect(findings.map(\.kind) == [.stairsDown])
+    }
+
+    @Test func aSingleStepIsNotStairs() {
+        let findings = TerrainAnalyzer.analyze(ground { $0 < 2.4 ? chest : chest + 0.17 })
+        #expect(findings.map(\.kind) == [.stepUp])
+    }
+
+    @Test func aSteepRampIsNotStairs() {
+        // 12% ramp: steeper than allowed for wheelchairs, still nowhere near stair steepness.
+        #expect(!TerrainAnalyzer.analyze(ground { chest + 0.12 * max(0, $0 - 1.5) }).contains { $0.kind == .stairsUp })
+    }
+
     @Test func oneNoisyBinIsNotACurb() {
         // A single low bin (a puddle, a LiDAR glitch), then back to normal.
         let findings = TerrainAnalyzer.analyze(ground { (2.1..<2.4).contains($0) ? chest - 0.2 : chest })

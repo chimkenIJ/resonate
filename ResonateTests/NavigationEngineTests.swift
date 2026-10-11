@@ -62,7 +62,7 @@ struct NavigationEngineTests {
         }
         #expect(index == 1)
         #expect(abs(distance - 20) < 1)
-        #expect(engine.announcement(for: events[0]) == "In about 20 meters, turn right onto Plum Street.")
+        #expect(engine.announcement(for: events[0]) == "In about 65 feet, turn right onto Plum Street.")
 
         // Not repeated on the next fix.
         #expect(engine.update(fix(north: 85)).isEmpty)
@@ -91,6 +91,107 @@ struct NavigationEngineTests {
         #expect(engine.hasArrived)
         #expect(engine.announcement(for: .arrived) == "You've arrived at Howey.")
         #expect(engine.update(fix(north: 100, east: 50)).isEmpty)
+    }
+
+    @Test func endsAtTheEntranceWhenThereIsOne() {
+        var route = sampleRoute()
+        let door = point(north: 100, east: 30)
+        route.entrance = RouteEntrance(coordinate: door, isMain: true, door: "automatic")
+        var engine = NavigationEngine(route: route)
+        _ = engine.update(fix(north: 100))
+        #expect(engine.update(fix(north: 100, east: 30)) == [.arrived])
+        #expect(engine.announcement(for: .arrived) == "You've arrived at the main entrance of Howey. It has an automatic door.")
+    }
+
+    @Test func poorGPSDoesNotCountTheTurnEarly() {
+        var engine = NavigationEngine(route: sampleRoute())
+        // 18 m before the turn with 20 m accuracy: a heads-up with the distance, not "turn right" yet.
+        let events = engine.update(fix(north: 82, accuracy: 20))
+        #expect(events == [.approaching(stepIndex: 1, distance: 18)] || events.allSatisfy { if case .approaching = $0 { true } else { false } })
+        #expect(engine.stepIndex == 0)
+        #expect(engine.announcement(for: .approaching(stepIndex: 1, distance: 18)) == "In about 60 feet, turn right onto Plum Street.")
+    }
+
+    @Test func distanceToTheTurnCountsDown() {
+        var engine = NavigationEngine(route: sampleRoute())
+        var last = Double.infinity
+        for north in stride(from: 5.0, through: 70, by: 5) {
+            // GPS wobbles a few meters to the side.
+            _ = engine.update(fix(north: north, east: north.truncatingRemainder(dividingBy: 10) == 0 ? 4 : -4))
+            let remaining = engine.distanceToNextManeuver ?? .infinity
+            #expect(remaining <= last)
+            last = remaining
+        }
+        #expect(abs(last - 30) < 2)
+    }
+
+    @Test func walkingBackwardSaysTurnAround() {
+        var engine = NavigationEngine(route: sampleRoute())
+        _ = engine.update(fix(north: 50, at: 0))
+        // A little GPS wobble backward is fine.
+        #expect(engine.update(fix(north: 45, at: 2)).isEmpty)
+        // Walking back toward the start: it takes a few readings over several seconds to be sure.
+        #expect(engine.update(fix(north: 35, at: 6)).isEmpty)
+        #expect(engine.update(fix(north: 30, at: 9)) == [.wrongWay])
+        #expect(engine.announcement(for: .wrongWay) == "Turn around. You're walking away from the route.")
+        // Said once, not on every fix…
+        #expect(engine.update(fix(north: 28, at: 11)).isEmpty)
+        // …and the distance on screen doesn't count up meanwhile.
+        #expect(abs((engine.distanceToNextManeuver ?? 0) - 50) < 2)
+        _ = engine.update(fix(north: 40, at: 15))
+        // Turned around.
+        #expect(engine.update(fix(north: 46, at: 20)) == [.rightWay])
+    }
+
+    @Test func oneGPSJumpAheadIsNotWalkingTheWrongWay() {
+        var engine = NavigationEngine(route: sampleRoute())
+        _ = engine.update(fix(north: 20, at: 0))
+        _ = engine.update(fix(north: 23, at: 2))
+        // GPS spikes 40 m ahead, then settles back to where the user really is, walking forward.
+        _ = engine.update(fix(north: 63, at: 4))
+        for (i, north) in [26.0, 29, 32, 35, 38].enumerated() {
+            #expect(!engine.update(fix(north: north, at: 6 + Double(i) * 2)).contains(.wrongWay))
+        }
+    }
+
+    @Test func gpsDirectionOfTravelConfirmsTheWrongWay() {
+        var engine = NavigationEngine(route: sampleRoute())
+        _ = engine.update(fix(north: 50, at: 0))
+        // GPS says walking north (the route's way) even though readings drift back: not the wrong way.
+        for (i, north) in [44.0, 40, 36, 34].enumerated() {
+            var reading = fix(north: north, at: 2 + Double(i) * 2)
+            reading.course = 0
+            reading.speed = 1.3
+            #expect(!engine.update(reading).contains(.wrongWay))
+        }
+    }
+
+    @Test func warnsBeforeArriving() {
+        var engine = NavigationEngine(route: sampleRoute())
+        _ = engine.update(fix(north: 100, at: 0))
+        let events = engine.update(fix(north: 100, east: 30, at: 10))
+        #expect(events == [.approaching(stepIndex: 2, distance: 20)] || events.contains { if case .approaching(2, _) = $0 { true } else { false } })
+        #expect(engine.announcement(for: .approaching(stepIndex: 2, distance: 20)) == "In about 65 feet, you'll reach Howey.")
+    }
+
+    @Test func noTurnWarningsBeforeReachingTheRoute() {
+        var engine = NavigationEngine(route: sampleRoute())
+        // Still inside a building 25 m to the side of the route, level with the turn: nothing yet.
+        #expect(engine.update(fix(north: 80, east: -25)).isEmpty)
+        #expect(!engine.isOnPath)
+        #expect(engine.distanceToNextManeuver == nil)
+    }
+
+    @Test func knowsWhenACrossingIsComing() {
+        var route = sampleRoute()
+        route.crossings = [point(north: 60)]
+        var engine = NavigationEngine(route: route)
+        _ = engine.update(fix(north: 10))
+        #expect(!engine.isNearCrossing)
+        _ = engine.update(fix(north: 45))
+        #expect(engine.isNearCrossing)
+        _ = engine.update(fix(north: 75))
+        #expect(!engine.isNearCrossing)
     }
 
     @Test func oneBadGPSReadingDoesNotTriggerAReroute() {
@@ -122,7 +223,7 @@ struct NavigationEngineTests {
         var engine = NavigationEngine(route: sampleRoute(hazards: [curb]))
         #expect(engine.update(fix(north: 45)) == [.hazardAhead(curb)])
         #expect(engine.update(fix(north: 50)).isEmpty)
-        #expect(engine.announcement(for: .hazardAhead(curb)) == "Raised curb ahead. Check the edge with your cane.")
+        #expect(engine.announcement(for: .hazardAhead(curb)) == "Raised curb ahead. Watch the edge.")
     }
 }
 
@@ -230,9 +331,32 @@ struct GeometryTests {
     }
 
     @Test func spokenAndShortDistances() {
-        #expect(DistanceText.short(2.4) == "2 m")
-        #expect(DistanceText.short(42) == "40 m")
-        #expect(DistanceText.spoken(1) == "1 meter")
-        #expect(DistanceText.spoken(1450) == "1.5 kilometers")
+        #expect(DistanceText.short(2.4) == "8 ft")
+        #expect(DistanceText.short(42) == "140 ft")
+        #expect(DistanceText.spoken(0.3) == "1 foot")
+        #expect(DistanceText.spoken(3) == "10 feet")
+        #expect(DistanceText.spoken(1450) == "0.9 miles")
+        #expect(DistanceText.spoken(1609) == "1 mile")
+    }
+}
+
+struct RouteWordingTests {
+    @Test func dropsCompassDirections() {
+        #expect(RouteWording.relative("Walk northeast on Peachtree Street.") == "Walk on Peachtree Street.")
+        #expect(RouteWording.relative("Head south for 200 meters.") == "Head for 200 meters.")
+        #expect(RouteWording.relative("Walk west.") == "Start walking.")
+        #expect(RouteWording.relative("Turn right onto A Street. Then, in 200 feet, Turn left onto B Street.") == "Turn right onto A Street.")
+    }
+
+    @Test func keepsStreetNames() {
+        #expect(RouteWording.relative("Continue east on North Avenue.") == "Continue on North Avenue.")
+        #expect(RouteWording.relative("Turn left onto East Paces Ferry Road.") == "Turn left onto East Paces Ferry Road.")
+    }
+
+    @Test func saysWhichWayToFaceAtTheStart() {
+        #expect(RouteWording.orientation(heading: 0, routeBearing: 10) == nil)
+        #expect(RouteWording.orientation(heading: 0, routeBearing: 45) == "Turn slightly right.")
+        #expect(RouteWording.orientation(heading: 10, routeBearing: 280) == "Turn left.")
+        #expect(RouteWording.orientation(heading: 90, routeBearing: 260) == "Turn around.")
     }
 }

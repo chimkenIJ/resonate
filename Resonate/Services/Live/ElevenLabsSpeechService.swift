@@ -268,6 +268,9 @@ final class ElevenLabsSpeechService: NSObject, SpeechServicing, AVAudioPlayerDel
         // Don't take over the microphone session while voice search is listening.
         if session.category != .playAndRecord {
             try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
+        } else {
+            // While recording, make sure speech still comes out of the loudspeaker, not the earpiece.
+            try? session.overrideOutputAudioPort(.speaker)
         }
         try? session.setActive(true)
     }

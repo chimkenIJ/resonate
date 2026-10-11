@@ -110,3 +110,42 @@ nonisolated struct DepthReader {
         return samples
     }
 }
+
+/// Turns points in the upright camera image into ARKit world positions, and gives the user's pose.
+nonisolated struct CameraGeometry {
+    private let fx, fy, cx, cy: Double
+    private let width, height: Double
+    private let transform: simd_float4x4
+
+    init(_ camera: ARCamera) {
+        let k = camera.intrinsics
+        fx = Double(k[0][0]); fy = Double(k[1][1]); cx = Double(k[2][0]); cy = Double(k[2][1])
+        width = Double(camera.imageResolution.width)
+        height = Double(camera.imageResolution.height)
+        transform = camera.transform
+    }
+
+    /// Upright focal length and width in pixels, for sideways offsets without a world position.
+    var uprightWidthPixels: Double { height }
+    var focalLengthPixels: Double { fx }
+
+    /// World position of a point in the upright image (normalized, top-left origin) at `depth` meters.
+    func worldPoint(portrait point: CGPoint, depth: Double) -> SIMD3<Double> {
+        let lx = Double(point.y) * width, ly = (1 - Double(point.x)) * height
+        let camera = simd_float4(Float((lx - cx) / fx * depth), Float(-(ly - cy) / fy * depth), Float(-depth), 1)
+        let world = transform * camera
+        return SIMD3(Double(world.x), Double(world.y), Double(world.z))
+    }
+
+    /// Where the user stands and faces, on the ground plane. Nil when the phone points straight up or down.
+    var pose: WalkingPose? {
+        let back = transform.columns.2
+        var forward = SIMD3<Double>(-Double(back.x), 0, -Double(back.z))
+        let length = (forward * forward).sum().squareRoot()
+        guard length > 0.3 else { return nil }
+        forward /= length
+        let right = SIMD3<Double>(-forward.z, 0, forward.x)
+        let origin = transform.columns.3
+        return WalkingPose(origin: SIMD3(Double(origin.x), Double(origin.y), Double(origin.z)), forward: forward, right: right)
+    }
+}

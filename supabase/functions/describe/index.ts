@@ -1,7 +1,7 @@
 // "Describe the whole scene" / "Describe room": a camera photo → a short spoken description
 // from Gemini. The API key stays here. Photos are not stored.
 //
-// POST { image_base64: string (JPEG), setting: "outdoor" | "indoor" }
+// POST { image_base64: string (JPEG), setting: "outdoor" | "indoor" | "door" }
 // 200  { description: string }
 
 import { corsHeaders, error, json, readJSON } from "../_shared/http.ts";
@@ -12,12 +12,21 @@ const PROMPTS: Record<string, string> = {
   outdoor:
     "You describe surroundings for a blind person holding a phone camera at chest height, outdoors. " +
     "In 2 or 3 short spoken sentences: first anything that could be a hazard in their path (curbs, poles, " +
-    "steps, vehicles, people, construction), then the layout, using left, right, ahead and approximate meters. " +
+    "steps, vehicles, people, construction), then the layout, using left, right, ahead and approximate feet. " +
+    "If a door or entrance is visible, say where it is and whether it is open or closed. " +
     "Read important signs or text. Describe only what is visible in this snapshot. Plain words, no preamble, never mention Gemini, AI, or 'the image shows'.",
+  door:
+    "You help a blind person find the nearest door: the way into a building, or the way out of the room or building they are in. " +
+    "They hold a phone camera at chest height. " +
+    "In 1 to 3 short spoken sentences: where the door or entrance is (left, right, ahead, approximate steps or feet), " +
+    "whether it is open or closed, and how to open it if you can tell (push or pull, handle on the left or right, " +
+    "automatic door, or an accessible door button and where it is). Mention steps or a ramp leading to it. " +
+    "If no door is visible, say so in one sentence and suggest turning slowly left or right. " +
+    "Describe only what is visible in this snapshot. Plain words, no preamble, never mention Gemini, AI, or 'the image shows'.",
   indoor:
     "You describe a room for a blind person holding a phone camera at chest height. " +
     "In 2 or 3 short spoken sentences: first anything in their path, then the room's layout and where the " +
-    "doors are, using left, right, ahead and approximate meters or steps. Read important signs or labels. " +
+    "doors are, using left, right, ahead and approximate feet or steps. Read important signs or labels. " +
     "Describe only what is visible in this snapshot. Plain words, no preamble, never mention Gemini, AI, or 'the image shows'.",
 };
 
@@ -27,7 +36,7 @@ Deno.serve(async (req) => {
 
   const body = await readJSON<{ image_base64?: unknown; setting?: unknown }>(req);
   const image = typeof body?.image_base64 === "string" ? body.image_base64 : "";
-  const setting = body?.setting === "indoor" ? "indoor" : "outdoor";
+  const setting = body?.setting === "indoor" || body?.setting === "door" ? body.setting : "outdoor";
   if (!image || image.length > MAX_IMAGE_BYTES * 1.4) return error("bad_request", "Send a JPEG photo.", 400);
 
   const key = Deno.env.get("GEMINI_API_KEY");

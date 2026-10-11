@@ -10,19 +10,14 @@ nonisolated struct MiniMapItem: Identifiable, Hashable, Sendable {
     var rotation: Double = 0
 }
 
-/// One update from the indoor scanner.
+/// One update from the indoor scanner: the room so far and where the user is in it.
+/// IndoorComposer and IndoorNavigator decide what's worth saying.
 nonisolated struct IndoorSnapshot: Sendable {
+    /// Walls, doors, furniture, and stairs from the scan, plus people (tracked, so each is one element).
+    var elements: [RoomElement]
+    var pose: FloorPose
+    /// Boxes for the camera view, with the same identifiers as `elements`.
     var objects: [DetectedObject]
-    /// For example "Chair 2 steps ahead, on your right."
-    var headline: String
-    /// For example "Walk straight. Wall stays on your left. Door is open ahead."
-    var guidance: String
-    var guidanceIcon: Maneuver
-    var miniMap: [MiniMapItem]
-    /// Safety alert when something is very close in the walking path.
-    var alert: ObstacleAlert? = nil
-    /// Stable key for `headline`, so changing step counts aren't re-announced.
-    var announcementKey: String = ""
     /// Scanning tip from RoomPlan ("Move the phone more slowly."), if any.
     var coaching: String? = nil
     /// Size of the upright camera image the boxes refer to (see DetectionFrame.imageSize).
@@ -31,6 +26,8 @@ nonisolated struct IndoorSnapshot: Sendable {
 
 nonisolated enum SceneSetting: String, Codable, Sendable {
     case outdoor, indoor
+    /// Where the door is, whether it's open, and how to open it.
+    case door
 }
 
 /// Result of the color recognition module.

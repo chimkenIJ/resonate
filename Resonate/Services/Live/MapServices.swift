@@ -168,6 +168,7 @@ final class LiveRoutingService: RoutingServicing {
                 let maneuver: String
                 let latitude: Double
                 let longitude: Double
+                let shapeIndex: Int?
             }
             nonisolated struct Feature: Decodable, Sendable {
                 let kind: String
@@ -187,6 +188,14 @@ final class LiveRoutingService: RoutingServicing {
             let features: [Feature]
             let avoided: [Point]
             let hazards: [Point]
+            nonisolated struct Entrance: Decodable, Sendable {
+                let latitude: Double
+                let longitude: Double
+                let isMain: Bool
+                let door: String?
+            }
+            let entrance: Entrance?
+            let crossings: [Point]?
         }
         let route: RouteDTO
     }
@@ -220,12 +229,13 @@ final class LiveRoutingService: RoutingServicing {
             steps: dto.steps.enumerated().map { index, step in
                 RouteStep(
                     id: index,
-                    instruction: step.instruction,
+                    instruction: RouteWording.relative(step.instruction),
                     distanceMeters: step.distanceM,
                     maneuver: Maneuver(rawValue: step.maneuver) ?? .straight,
                     start: GeoPoint(latitude: step.latitude, longitude: step.longitude),
-                    spokenInstruction: step.spokenInstruction,
-                    alertInstruction: step.alertInstruction
+                    spokenInstruction: step.spokenInstruction.map(RouteWording.relative),
+                    alertInstruction: step.alertInstruction.map(RouteWording.relative),
+                    shapeIndex: step.shapeIndex
                 )
             },
             polyline: dto.polyline.compactMap { $0.count == 2 ? GeoPoint(latitude: $0[0], longitude: $0[1]) : nil },
@@ -236,6 +246,10 @@ final class LiveRoutingService: RoutingServicing {
             hazards: dto.hazards.compactMap { point in
                 guard let kind = point.kind.flatMap(RouteHazard.Kind.init(rawValue:)) else { return nil }
                 return RouteHazard(kind: kind, coordinate: GeoPoint(latitude: point.latitude, longitude: point.longitude))
+            },
+            crossings: (dto.crossings ?? []).map { GeoPoint(latitude: $0.latitude, longitude: $0.longitude) },
+            entrance: dto.entrance.map {
+                RouteEntrance(coordinate: GeoPoint(latitude: $0.latitude, longitude: $0.longitude), isMain: $0.isMain, door: $0.door)
             }
         )
     }

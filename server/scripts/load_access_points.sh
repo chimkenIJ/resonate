@@ -30,11 +30,11 @@ fi
 gdal() { docker run --rm "${MOUNT[@]}" "$GDAL_IMAGE" "$@"; }
 psql_run() { docker run --rm -i "$PSQL_IMAGE" psql "$CONTAINER_DB_URL" -v ON_ERROR_STOP=1 -q; }
 
-echo "→ Staging OSM points (crossings, kerbs, tactile paving, sound signals, elevators)…"
+echo "→ Staging OSM points (crossings, kerbs, tactile paving, sound signals, elevators, entrances)…"
 echo "create schema if not exists osm_import;" | psql_run
 gdal ogr2ogr -f PostgreSQL "PG:$CONTAINER_DB_URL" "$PBF_IN" points \
   -nln osm_import.points -overwrite -lco GEOMETRY_NAME=geom -lco SPATIAL_INDEX=NONE \
-  -where "highway IN ('crossing','elevator','traffic_signals') OR other_tags LIKE '%\"kerb\"%' OR other_tags LIKE '%tactile_paving%' OR other_tags LIKE '%:sound%' OR other_tags LIKE '%\"crossing\"%'"
+  -where "highway IN ('crossing','elevator','traffic_signals') OR other_tags LIKE '%\"kerb\"%' OR other_tags LIKE '%tactile_paving%' OR other_tags LIKE '%:sound%' OR other_tags LIKE '%\"crossing\"%' OR other_tags LIKE '%\"entrance\"%'"
 
 echo "→ Staging OSM steps and elevator ways…"
 gdal ogr2ogr -f PostgreSQL "PG:$CONTAINER_DB_URL" "$PBF_IN" lines \
@@ -46,8 +46,12 @@ psql_run <<'SQL'
 begin;
 truncate public.osm_access_points;
 
-insert into public.osm_access_points (osm_id, kind, geom)
-select p.osm_id::bigint, v.kind, extensions.st_setsrid(p.geom, 4326)::extensions.geography
+insert into public.osm_access_points (osm_id, kind, geom, entrance, door)
+select p.osm_id::bigint, v.kind, extensions.st_setsrid(p.geom, 4326)::extensions.geography,
+       case when v.kind = 'entrance' then substring(p.other_tags from '"entrance"=>"([^"]+)"') end,
+       case when v.kind = 'entrance' then coalesce(
+         case when p.other_tags ~ '"automatic_door"=>"(yes|button|motion|continuous|slowdown_button)"' then 'automatic' end,
+         substring(p.other_tags from '"door"=>"([^"]+)"')) end
 from osm_import.points p
 cross join lateral (values
   (case when p.other_tags ~ '"kerb"=>"(lowered|flush|no)"' then 'curb_ramp' end),
@@ -55,7 +59,8 @@ cross join lateral (values
   (case when p.other_tags ~ '"tactile_paving"=>"(yes|contrasted|primitive)"' then 'tactile_paving' end),
   (case when p.other_tags ~ '"(traffic_signals:sound|crossing:signals:sound)"=>"(yes|walk|locate)"' then 'audio_signal' end),
   (case when p.highway = 'crossing' or p.other_tags ~ '"crossing"=>' then 'crossing' end),
-  (case when p.highway = 'elevator' then 'elevator' end)
+  (case when p.highway = 'elevator' then 'elevator' end),
+  (case when p.other_tags ~ '"entrance"=>' then 'entrance' end)
 ) as v(kind)
 where v.kind is not null and p.osm_id ~ '^[0-9]+$';
 

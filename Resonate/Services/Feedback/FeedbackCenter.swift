@@ -44,6 +44,38 @@ final class FeedbackCenter {
         return true
     }
 
+    var isSpeaking: Bool { speech.isSpeaking }
+
+    /// Walking: something very close in the path or coming fast. One stop buzz and a short phrase that
+    /// interrupts anything playing (pre-recorded pieces, so no network wait).
+    func deliverUrgent(_ alert: ObstacleAlert) async {
+        guard !Task.isCancelled else { return }
+        currentAlert = alert
+        let channels = preferences.alertChannels
+        if channels.contains(.buzzes) { haptics.play(.stop) }
+        if channels.contains(.tones) { tones.play(.stop) }
+        if channels.contains(.voice) { await speech.speak(alert.spokenText, priority: .safety, fragments: alert.fragments) }
+    }
+
+    /// Walking: the periodic "what's ahead" summary. No buzz, and never spoken over anything else.
+    func speakSummary(_ alert: ObstacleAlert) async {
+        guard !Task.isCancelled, preferences.alertChannels.contains(.voice), !speech.isSpeaking else { return }
+        await speech.speak(alert.spokenText, priority: .navigation, fragments: alert.fragments)
+    }
+
+    /// A spoken update made of pre-recorded pieces, so it plays instantly and offline once recorded.
+    func say(_ fragments: [String], priority: SpeechPriority = .navigation) async {
+        guard !Task.isCancelled, preferences.alertChannels.contains(.voice), !fragments.isEmpty else { return }
+        await speech.speak(fragments.joined(separator: " "), priority: priority, fragments: fragments)
+    }
+
+    /// Walking: one light tap when the nearest thing in the path gets closer. The only routine buzz.
+    func proximityPulse() {
+        let channels = preferences.alertChannels
+        if channels.contains(.buzzes) { haptics.play(.tap) }
+        if channels.contains(.tones) { tones.play(.headsUp) }
+    }
+
     /// Speaks a navigation or info message, plus a turn buzz if the user wants buzzes.
     func announce(_ text: String, priority: SpeechPriority = .navigation, haptic: HapticCue? = nil) async {
         guard !Task.isCancelled else { return }
