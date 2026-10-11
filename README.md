@@ -155,11 +155,13 @@ For a manual demo check, continue as a guest, complete onboarding, search for a 
 
 Passing unit tests or trying simulated screens does not establish real-world detection accuracy or route accessibility.
 
-## Storage and current features
+## Storage and feature status
 
-Supabase stores user profiles, saved places, folders, preferences, and OSM accessibility points. The `saved_routes` table stores saved destinations rather than complete route histories. Routing runs on the separate Valhalla server.
+With live services configured, Supabase stores signed-in user profiles, saved places, folders, and preferences. Guest saved places and preferences stay on the phone. The `saved_routes` table stores saved destinations rather than complete route histories.
 
-Color recognition currently uses a mock service. On non-LiDAR phones, obstacle distances are estimated from object size; indoor room scanning requires LiDAR.
+OSM accessibility points are stored in Supabase, while route calculation runs on the separate Valhalla server. In the local development setup, account data remains in hosted Supabase and routing functions use the local stack.
+
+Color recognition has a live, on-device implementation that samples the center of the camera image. Its output depends on lighting and what is inside the aiming area. Demo mode uses mock color readings, as it does for the other services.
 
 ## Limits
 
