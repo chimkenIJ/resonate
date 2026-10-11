@@ -25,7 +25,6 @@ struct IndoorScanView: View {
                 HStack {
                     BackButton(accessibilityLabel: "Back to home", style: .floating)
                     Spacer()
-                    StatusPill(text: !model.isSupported ? "Not available" : (model.isGuiding ? "Guiding to door" : "Indoors"), accent: .sage)
                 }
                 .padding(.horizontal, Metrics.screenPadding)
                 .padding(.top, 8)

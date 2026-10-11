@@ -24,6 +24,10 @@ struct FolderView: View {
                                      accessibilityHint: isEditing ? nil : "Shows delete buttons") {
                         isEditing.toggle()
                     }
+                    // Top right, where the route and camera screens have their microphone too.
+                    if app.assistant.isEnabled {
+                        AssistantTalkButton(assistant: app.assistant, diameter: 60)
+                    }
                 }
 
                 HStack(spacing: 16) {

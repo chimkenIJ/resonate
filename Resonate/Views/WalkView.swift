@@ -45,12 +45,6 @@ struct WalkView: View {
         HStack {
             BackButton(accessibilityLabel: model.backLabel, style: .floating)
             Spacer()
-            StatusPill(text: model.isStarting ? "Preparing to scan" : "Watching ahead", accent: .clay)
-            Spacer()
-            IconCircleButton(systemImage: "eye", accessibilityLabel: "Describe the whole scene", style: .floating) {
-                Task { await model.describeScene() }
-            }
-            .disabled(model.isStarting || model.isDescribing)
         }
         .padding(.horizontal, Metrics.screenPadding)
         .padding(.top, 8)

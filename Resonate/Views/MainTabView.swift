@@ -3,7 +3,7 @@ import SwiftUI
 /// Tabs (Home, Search, Saved, Settings) with a camera button in the middle.
 /// Each tab has its own navigation stack; camera screens open full screen above everything.
 /// When the voice assistant is on in Settings, its microphone replaces the camera button in the
-/// tab bar (the camera tools stay on Home) and floats over screens without the tab bar.
+/// tab bar (the camera tools stay on Home) and sits at the top right of screens without the tab bar.
 struct MainTabView: View {
     @Environment(AppModel.self) private var app
 
@@ -22,10 +22,9 @@ struct MainTabView: View {
                 .navigationDestination(for: AppRoute.self) { destination($0, in: router.tab) }
         }
         .id(router.tab)
-        .assistantMic()
         .fullScreenCover(item: $router.cover) { cover in
             coverView(cover)
-                .assistantMic(onEveryScreen: true)
+                .assistantMic()
                 .environment(app)
         }
     }

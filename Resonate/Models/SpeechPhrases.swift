@@ -55,7 +55,6 @@ nonisolated enum SpeechPhrases {
             "Turn around. You're walking away from the route.", "That's the right way.",
             "You're on the stairs, going up. Hold the railing.", "You're on the stairs, going down. Hold the railing.",
             "Raised curb ahead. Watch the edge.", "Steps ahead.",
-            "Watching ahead. I'll warn you about obstacles.",
         ])
         return phrases.sorted()
     }

@@ -65,21 +65,14 @@ struct AssistantTalkButton: View {
     }
 }
 
-/// Puts the talk button over screens without the tab bar (pushed screens and camera screens),
-/// in a fixed spot on the right edge, while the assistant is enabled in Settings.
+/// Puts the talk button over the camera screens while the assistant is enabled in Settings. The
+/// tab screens have it in the tab bar; the route and folder screens have it in their own top row.
 struct AssistantMicOverlay: ViewModifier {
-    /// False on the tab stacks: their main screens have the button in the tab bar.
-    let onEveryScreen: Bool
     @Environment(AppModel.self) private var app
 
     func body(content: Content) -> some View {
         content.overlay {
-            let router = app.router
-            let path = router.paths[router.tab] ?? []
-            let tabBarHidden = onEveryScreen || !path.isEmpty
-            // The route screen has its own microphone at the top, over the map.
-            let hasOwnButton = !onEveryScreen && { if case .route = path.last { true } else { false } }()
-            if app.assistant.isEnabled, app.phase == .ready, tabBarHidden, !hasOwnButton {
+            if app.assistant.isEnabled, app.phase == .ready {
                 FloatingTalkButton(assistant: app.assistant)
             }
         }
@@ -87,42 +80,37 @@ struct AssistantMicOverlay: ViewModifier {
 }
 
 extension View {
-    /// Adds the floating talk button where the tab bar isn't showing.
-    func assistantMic(onEveryScreen: Bool = false) -> some View {
-        modifier(AssistantMicOverlay(onEveryScreen: onEveryScreen))
+    /// Adds the talk button at the top right of a camera screen.
+    func assistantMic() -> some View {
+        modifier(AssistantMicOverlay())
     }
 }
 
 private struct FloatingTalkButton: View {
     let assistant: VoiceAssistant
 
-    @ScaledMetric(relativeTo: .title2) private var size: CGFloat = 68
-
     var body: some View {
-        GeometryReader { geometry in
-            let diameter = min(size, Metrics.iconButtonMaxSize)
-            let inset = Metrics.screenPadding + diameter / 2
-
-            AssistantTalkButton(assistant: assistant, diameter: diameter)
-                .overlay(alignment: .trailing) {
-                    if let caption {
-                        Text(caption)
-                            .appFont(.caption)
-                            .foregroundStyle(Palette.textPrimary)
-                            .lineLimit(1)
-                            .fixedSize()
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(Capsule().fill(Palette.surfaceRaised))
-                            .offset(x: -(diameter + 10))
-                            .allowsHitTesting(false)
-                            .accessibilityHidden(true) // the button's value says the same thing
-                    }
+        let diameter: CGFloat = 60
+        AssistantTalkButton(assistant: assistant, diameter: diameter)
+            .overlay(alignment: .trailing) {
+                if let caption {
+                    Text(caption)
+                        .appFont(.caption)
+                        .foregroundStyle(Palette.textPrimary)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Capsule().fill(Palette.surfaceRaised))
+                        .offset(x: -(diameter + 10))
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true) // the button's value says the same thing
                 }
-                // Always the same spot on the right edge, so it's easy to find and can't be moved by accident.
-                .position(x: geometry.size.width - inset, y: min(max(geometry.size.height * 0.72, inset), geometry.size.height - inset))
-        }
-        .ignoresSafeArea(.keyboard)
+            }
+            // Top right, level with the Back button, where the route screen has its microphone too.
+            .padding(.trailing, Metrics.screenPadding)
+            .padding(.top, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
 
     private var caption: String? {

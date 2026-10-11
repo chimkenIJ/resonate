@@ -35,7 +35,6 @@ struct ColorIdentifyView: View {
                 HStack {
                     BackButton(accessibilityLabel: "Back to home", style: .floating)
                     Spacer()
-                    StatusPill(text: "Naming colors", accent: .mauve)
                 }
                 .padding(.horizontal, Metrics.screenPadding)
                 .padding(.top, 8)

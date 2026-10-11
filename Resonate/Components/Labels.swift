@@ -30,28 +30,6 @@ struct FeatureChip: View {
     }
 }
 
-/// Status capsule over the camera: "● Watching ahead", "● Scanning room".
-struct StatusPill: View {
-    let text: String
-    let accent: Accent
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(accent.color)
-                .frame(width: 10, height: 10)
-                .accessibilityHidden(true)
-            Text(text)
-                .appFont(.label)
-                .foregroundStyle(Palette.textPrimary)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .background(Capsule().fill(Palette.surface))
-        .accessibilityElement(children: .combine)
-    }
-}
-
 /// Title and subtitle at the top of a screen ("Saved places / 6 folders").
 struct ScreenHeader: View {
     let title: String
@@ -198,7 +176,7 @@ struct FlowLayout: Layout {
 #Preview {
     VStack(alignment: .leading, spacing: 16) {
         ScreenHeader(title: "Saved places", subtitle: "6 folders")
-        HStack { TagLabel(text: "Heads up", accent: .clay); StatusPill(text: "Watching ahead", accent: .clay) }
+        TagLabel(text: "Heads up", accent: .clay)
         FlowLayout {
             FeatureChip(text: "Curb ramps", accent: .sand)
             FeatureChip(text: "Audio crossings", accent: .mauve)

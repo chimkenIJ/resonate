@@ -136,7 +136,6 @@ struct PillButton: View {
             BackButton(accessibilityLabel: "Back to home")
             Spacer()
             IconCircleButton(systemImage: "plus", accessibilityLabel: "Add a folder") {}
-            IconCircleButton(systemImage: "eye", accessibilityLabel: "Describe the whole scene", style: .floating) {}
         }
         PillButton(title: "Start walking", systemImage: "location") {}
         HStack(spacing: 10) {
