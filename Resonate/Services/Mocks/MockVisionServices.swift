@@ -22,8 +22,8 @@ final class MockObstacleDetectionService: ObstacleDetectionServicing {
 
     func requestPermission() async -> Bool { true }
 
-    func frames() -> AsyncStream<DetectionFrame> {
-        cycling(SampleData.outdoorFrames, every: .seconds(3))
+    func frames(detecting: Bool) -> AsyncStream<DetectionFrame> {
+        detecting ? cycling(SampleData.outdoorFrames, every: .seconds(3)) : AsyncStream { _ in }
     }
 
     func latestFrameJPEG() async -> Data? { Data() }

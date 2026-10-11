@@ -2,6 +2,9 @@ import Foundation
 
 /// Sends an alert through whichever channels the user picked (voice, buzzes, tones)
 /// and keeps the same obstacle from being repeated every frame.
+///
+/// With voice on, buzzes and tones are only for immediate danger (a "stop" alert). Without voice
+/// they're the user's only cue, so turns and other updates still buzz.
 @Observable
 final class FeedbackCenter {
     private let speech: any SpeechServicing
@@ -38,8 +41,10 @@ final class FeedbackCenter {
         lastAlertTime = now
 
         let channels = preferences.alertChannels
-        if channels.contains(.buzzes), let cue = alert.severity.hapticCue { haptics.play(cue) }
-        if channels.contains(.tones) { tones.play(alert.severity == .stop ? .stop : .headsUp) }
+        if alert.severity == .stop || !channels.contains(.voice) {
+            if channels.contains(.buzzes), let cue = alert.severity.hapticCue { haptics.play(cue) }
+            if channels.contains(.tones) { tones.play(alert.severity == .stop ? .stop : .headsUp) }
+        }
         if channels.contains(.voice) { await speech.speak(alert.spokenText, priority: .safety, fragments: alert.fragments) }
         return true
     }
@@ -69,17 +74,20 @@ final class FeedbackCenter {
         await speech.speak(fragments.joined(separator: " "), priority: priority, fragments: fragments)
     }
 
-    /// Walking: one light tap when the nearest thing in the path gets closer. The only routine buzz.
+    /// Walking: one light tap when the nearest thing in the path gets closer (indoors: when lined up
+    /// with the door). Only without voice; with voice the user hears about it instead.
     func proximityPulse() {
         let channels = preferences.alertChannels
+        guard !channels.contains(.voice) else { return }
         if channels.contains(.buzzes) { haptics.play(.tap) }
         if channels.contains(.tones) { tones.play(.headsUp) }
     }
 
-    /// Speaks a navigation or info message, plus a turn buzz if the user wants buzzes.
+    /// Speaks a navigation or info message. `haptic` (a turn buzz) is felt only by users without voice.
     func announce(_ text: String, priority: SpeechPriority = .navigation, haptic: HapticCue? = nil) async {
         guard !Task.isCancelled else { return }
-        if let haptic, preferences.alertChannels.contains(.buzzes) { haptics.play(haptic) }
+        let channels = preferences.alertChannels
+        if let haptic, channels.contains(.buzzes), !channels.contains(.voice) { haptics.play(haptic) }
         if preferences.alertChannels.contains(.voice) || priority == .info {
             await speech.speak(text, priority: priority)
         }

@@ -149,9 +149,17 @@ protocol ObstacleDetectionServicing: AnyObject {
     var depthSource: DepthSource { get }
     var previewSource: CameraPreviewSource { get }
     func requestPermission() async -> Bool
-    func frames() -> AsyncStream<DetectionFrame>
+    /// Runs the camera. With `detecting` false the camera only serves `latestFrameJPEG()`:
+    /// no object detection runs and the stream yields nothing until it's ended.
+    func frames(detecting: Bool) -> AsyncStream<DetectionFrame>
     /// JPEG of the latest camera frame, for "Describe the whole scene".
     func latestFrameJPEG() async -> Data?
+}
+
+extension ObstacleDetectionServicing {
+    func frames() -> AsyncStream<DetectionFrame> {
+        frames(detecting: true)
+    }
 }
 
 /// Indoor scanning with ARKit LiDAR / RoomPlan. Fully on-device.
@@ -161,6 +169,12 @@ protocol IndoorScanServicing: AnyObject {
     func requestPermission() async -> Bool
     func snapshots() -> AsyncStream<IndoorSnapshot>
     func latestFrameJPEG() async -> Data?
+}
+
+/// A camera screen that can describe what's in front of the user on request.
+protocol SceneDescribing: AnyObject {
+    /// Describes the scene aloud. Returns what was said, or nil if it failed or the screen closed.
+    func describeScene() async -> String?
 }
 
 /// On-demand descriptions from Gemini, through a Supabase Edge Function.

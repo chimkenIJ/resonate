@@ -21,7 +21,24 @@ struct FeedbackCenterTests {
         #expect(await center.deliver(bike, now: start.addingTimeInterval(2)) == false)
         #expect(await center.deliver(bike, now: start.addingTimeInterval(7)))
         #expect(speech.log.count == 2)
-        #expect(haptics.played == [.headsUp, .headsUp])
+        // With voice on, only immediate danger buzzes.
+        #expect(haptics.played.isEmpty)
+    }
+
+    @Test func withVoiceOnlyDangerBuzzes() async {
+        let (center, _, haptics) = makeCenter(channels: [.voice, .buzzes])
+        center.proximityPulse()
+        await center.announce("Turn left.", priority: .navigation, haptic: .turnLeft)
+        #expect(haptics.played.isEmpty)
+        let stop = ObstacleAlert(severity: .stop, headline: "Stop. Post ahead.", guidance: "Veer left.", guidanceIcon: .slightLeft, dedupeKey: "post")
+        await center.deliverUrgent(stop)
+        #expect(haptics.played == [.stop])
+    }
+
+    @Test func withoutVoiceTurnsStillBuzz() async {
+        let (center, _, haptics) = makeCenter(channels: [.buzzes])
+        await center.announce("Turn left.", priority: .navigation, haptic: .turnLeft)
+        #expect(haptics.played == [.turnLeft])
     }
 
     @Test func respectsTheChosenChannels() async {

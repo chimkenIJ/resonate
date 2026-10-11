@@ -58,9 +58,15 @@ nonisolated enum ToneCue: String, Codable, Hashable, Sendable {
     case headsUp, stop, turn, arrived, listening
 }
 
-/// Speech queue priority. Safety interrupts everything else.
+/// Speech queue priority, least to most important (see SpeechQueue). Safety interrupts everything;
+/// directions and new walking updates cut a scene description short.
 nonisolated enum SpeechPriority: Int, Comparable, Sendable {
-    case info, navigation, safety, snapshot
+    /// Confirmations, route overviews, assistant replies.
+    case info
+    /// A requested scene description.
+    case snapshot
+    case navigation
+    case safety
 
     static func < (lhs: SpeechPriority, rhs: SpeechPriority) -> Bool { lhs.rawValue < rhs.rawValue }
 }

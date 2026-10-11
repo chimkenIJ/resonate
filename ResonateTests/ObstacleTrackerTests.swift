@@ -193,12 +193,12 @@ struct WalkNarratorTests {
         outputs.compactMap { if case .summary(let alert, let speak, _, _) = $0 { (alert, speak) } else { nil } }
     }
 
-    @Test func summarizesAtMostEveryFewSeconds() {
+    @Test func reportsAfterLookingForTwoSeconds() {
         var narrator = WalkNarrator()
         let person = track("Person", .person, distance: 2, lateral: 0.7, tier: .important)
         #expect(summaries(narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start)).isEmpty)
-        #expect(summaries(narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start.addingTimeInterval(2))).isEmpty)
-        let spoken = summaries(narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start.addingTimeInterval(5)))
+        #expect(summaries(narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start.addingTimeInterval(1))).isEmpty)
+        let spoken = summaries(narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start.addingTimeInterval(2)))
         #expect(spoken.count == 1)
         #expect(spoken.first?.1 == true)
         #expect(spoken.first?.0.spokenText == "Path clear. Person ahead, slightly right, 7 feet.")
@@ -226,10 +226,35 @@ struct WalkNarratorTests {
         let pole = track("Parking meter", .obstacle, distance: 1.2, tier: .urgent)
         let first = narrator.update(tracks: [pole], clearance: nil, canSpeak: false, now: start)
         guard case .urgent(let alert) = first.first else { Issue.record("Expected an urgent alert"); return }
-        #expect(alert.spokenText == "Stop. Parking meter straight ahead. Veer left.")
+        #expect(alert.spokenText == "Stop. Veer left. Parking meter straight ahead.")
         #expect(alert.guidance == "Veer left.")
         let again = narrator.update(tracks: [pole], clearance: nil, canSpeak: true, now: start.addingTimeInterval(1))
         #expect(!again.contains { if case .urgent = $0 { true } else { false } })
+    }
+
+    @Test func aSwingingPhoneDoesntRepeatTheWarning() {
+        var narrator = WalkNarrator()
+        let pole = track("Post", .obstacle, distance: 1.2, tier: .urgent)
+        #expect(narrator.update(tracks: [pole], clearance: nil, canSpeak: true, now: start).contains { if case .urgent = $0 { true } else { false } })
+        // The camera loses it and finds it again as a new thing, over and over.
+        for i in 1...12 {
+            let refound = track(i.isMultiple(of: 2) ? "Post" : "Obstacle", .obstacle, distance: 1.2, tier: .urgent)
+            let outputs = narrator.update(tracks: [refound], clearance: nil, canSpeak: true, now: start.addingTimeInterval(Double(i) * 0.5))
+            #expect(!outputs.contains { if case .urgent = $0 { true } else { false } })
+        }
+        // A different kind of danger is still said right away.
+        let edge = track("Drop-off", .dropOff, distance: 1.5, tier: .urgent)
+        #expect(narrator.update(tracks: [edge], clearance: nil, canSpeak: true, now: start.addingTimeInterval(6.5)).contains { if case .urgent = $0 { true } else { false } })
+    }
+
+    @Test func warningSaysWhatToDoThenWhatsAround() {
+        var narrator = WalkNarrator()
+        let person = track("Person", .person, distance: 2, lateral: 1.5, tier: .important)
+        _ = narrator.update(tracks: [person], clearance: nil, canSpeak: true, now: start)
+        let pole = track("Parking meter", .obstacle, distance: 1.2, tier: .urgent)
+        let outputs = narrator.update(tracks: [pole, person], clearance: nil, canSpeak: true, now: start.addingTimeInterval(0.5))
+        guard case .urgent(let alert)? = outputs.first else { Issue.record("Expected an urgent alert"); return }
+        #expect(alert.spokenText == "Stop. Veer left. Parking meter straight ahead. Person on your right, 8 feet.")
     }
 
     @Test func approachingSaysWhereFrom() {

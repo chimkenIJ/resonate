@@ -31,7 +31,7 @@ struct IconBadge: View {
     }
 }
 
-/// Home screen tile: "Walk outside", "Scan indoors", "Saved places".
+/// Home screen tile: "Scan the area", "Scan indoors", "Saved places".
 struct FeatureTile: View {
     let title: String
     let subtitle: String
@@ -260,7 +260,7 @@ struct DestinationResultRow: View {
     ScrollView {
         VStack(spacing: 20) {
             VoiceSearchCard {}
-            FeatureTile(title: "Walk outside", subtitle: "Warns you about obstacles", systemImage: "location", accent: .sand) {}
+            FeatureTile(title: "Scan the area", subtitle: "Tells you what's around you", systemImage: "eye", accent: .sand) {}
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible())], spacing: 22) {
                 ForEach(SampleData.folders.prefix(2)) { FolderCard(folder: $0) {} }
             }

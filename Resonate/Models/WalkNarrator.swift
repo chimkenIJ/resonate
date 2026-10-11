@@ -1,10 +1,14 @@
 import Foundation
 
-/// Decides what to say while walking, like a sighted guide: the way ahead first, then at most two
-/// things worth knowing about. Speaks only when something meaningfully changed.
+/// Decides what to say while walking, like a sighted guide: what to do first, then at most two
+/// things around the user ("Veer left. Person on your right, 6 feet."). Speaks only when something
+/// meaningfully changed.
 ///
-/// - Urgent (very close in the path, or coming fast): a short interrupting phrase and a stop buzz, right away.
-/// - Important: in the next summary, at most every `summaryInterval` seconds.
+/// - Reports cover everything seen over the last `reportWindow` seconds, so a phone swinging around
+///   doesn't produce a new report every frame. Each one is read out in full before the next.
+/// - Urgent (very close in the path, or coming fast): right away, in the same format ("Stop. Veer left.
+///   Post straight ahead. Person on your right, 6 feet."), with a stop buzz. The same kind of danger isn't
+///   called out again within `urgentCooldown` unless it gets closer, however the camera re-finds it.
 /// - Everything else: silent, but still tracked.
 ///
 /// Templates, not a language model: instant, free, offline, and predictable. Pure logic, easy to test.
@@ -34,20 +38,26 @@ nonisolated struct WalkNarrator {
         }
     }
 
-    static let summaryInterval: TimeInterval = 5
+    /// How long to look before reporting, and the shortest time between reports.
+    static let reportWindow: TimeInterval = 2
     /// With nothing new to say, a short "Path clear." this often.
     static let clearReminderInterval: TimeInterval = 15
     static let pulseCooldown: TimeInterval = 4
-    /// The same object isn't announced as urgent again within this time.
-    static let urgentCooldown: TimeInterval = 6
+    /// The same kind of danger isn't called out again within this time unless it gets closer.
+    static let urgentCooldown: TimeInterval = 8
+    /// Even when it gets closer, not more often than this.
+    static let urgentMinGap: TimeInterval = 3
     static let maxObstaclesSpoken = 2
 
     private var startedAt: Date?
-    private var lastSummaryAt: Date = .distantPast
+    private var lastReportAt: Date = .distantPast
     private var lastSpokenKey: String?
     private var lastSpokenAt: Date = .distantPast
     private var advice: PathAdvice = .clear
-    private var urgentAnnounced: [UUID: Date] = [:]
+    /// What's been seen lately (important or urgent), and when, by track.
+    private var recentlySeen: [UUID: (track: TrackedObstacle, at: Date)] = [:]
+    /// Dangers already called out, by kind: how close it was then, when it was said, and when it was last seen.
+    private var saidDangers: [String: (bucket: Int, said: Date, seen: Date)] = [:]
     private var lastPulseAt: Date = .distantPast
     private var lastPulseBucket: Int?
     /// On stairs: after the first warning, stairs, curbs, and unnamed obstacles stay quiet until no stairs
@@ -76,7 +86,7 @@ nonisolated struct WalkNarrator {
     mutating func update(tracks all: [TrackedObstacle], clearance: PathClearance?, canSpeak: Bool, now: Date) -> [Output] {
         if startedAt == nil {
             startedAt = now
-            lastSummaryAt = now // first summary after a few seconds, not on top of the welcome
+            lastReportAt = now // first report after a look around, not on top of the welcome
         }
         var outputs: [Output] = []
 
@@ -95,15 +105,39 @@ nonisolated struct WalkNarrator {
         }
         let tracks = stairsQuietUntil == nil ? all : all.filter { !Self.isStairsRelated($0) }
 
-        // Urgent: newly urgent only. Everything urgent right now counts as said, so two at once don't stack.
-        urgentAnnounced = urgentAnnounced.filter { now.timeIntervalSince($0.value) < Self.urgentCooldown }
+        // What's been seen over the last couple of seconds, one entry per thing, nearest first.
+        for track in tracks where track.isVisible && track.tier >= .important { recentlySeen[track.id] = (track, now) }
+        recentlySeen = recentlySeen.filter { now.timeIntervalSince($0.value.at) <= Self.reportWindow }
+        let recent = Self.distinct(recentlySeen.values.map(\.track))
+
+        // Urgent: right away, once per kind of danger (a new camera track of the same thing doesn't count).
         let urgent = tracks.filter { $0.tier == .urgent }
-        let fresh = urgent.filter { urgentAnnounced[$0.id] == nil }
-        if let first = fresh.min(by: { ($0.distance ?? .infinity) < ($1.distance ?? .infinity) }) {
-            outputs.append(.urgent(Self.urgentAlert(for: first, clearance: clearance)))
-            if first.category == .stairs { startStairsQuiet(now) }
+        saidDangers = saidDangers.filter { now.timeIntervalSince($0.value.seen) < Self.urgentCooldown }
+        let fresh = urgent.filter { track in
+            guard let said = saidDangers[Self.dangerKey(track)] else { return true }
+            // It got closer, and the last warning wasn't just now.
+            return Self.bucket(track.distance ?? 9) < said.bucket && now.timeIntervalSince(said.said) >= Self.urgentMinGap
         }
-        for track in urgent { urgentAnnounced[track.id] = now }
+        if let first = fresh.min(by: { ($0.distance ?? .infinity) < ($1.distance ?? .infinity) }) {
+            // Then what else is around (not the same thing found twice).
+            let others = recent.filter { $0.id != first.id && $0.label != first.label }
+                .prefix(Self.maxObstaclesSpoken - 1)
+            outputs.append(.urgent(Self.urgentAlert(for: first, clearance: clearance, others: Array(others))))
+            if first.category == .stairs { startStairsQuiet(now) }
+            saidDangers[Self.dangerKey(first)] = (Self.bucket(first.distance ?? 9), now, now)
+            // What the alert said counts as reported, so the next report doesn't repeat it.
+            lastReportAt = now
+            lastSpokenAt = now
+            advice = Self.advice(clearance: clearance, inPath: recent.filter(\.inPath), previous: advice)
+            lastSpokenKey = Self.reportKey(advice: advice, obstacles: Array(recent.prefix(Self.maxObstaclesSpoken)))
+        }
+        // Everything urgent right now counts as said, so two at once don't stack and one that stays
+        // in front isn't repeated.
+        for track in urgent {
+            let key = Self.dangerKey(track)
+            let said = saidDangers[key]
+            saidDangers[key] = (said?.bucket ?? Self.bucket(track.distance ?? 9), said?.said ?? now, now)
+        }
 
         // Proximity buzz for the nearest thing in the path, only when it gets closer, with a cooldown.
         let nearest = tracks.filter { $0.inPath && $0.tier >= .important }.compactMap(\.distance).min()
@@ -114,29 +148,57 @@ nonisolated struct WalkNarrator {
         }
         if fresh.isEmpty { lastPulseBucket = bucket }
 
-        // Summary every few seconds.
-        guard now.timeIntervalSince(lastSummaryAt) >= Self.summaryInterval else { return outputs }
-        lastSummaryAt = now
-        let important = tracks
-            .filter { $0.tier >= .important }
-            .sorted { ($0.distance ?? .infinity) < ($1.distance ?? .infinity) }
-            .prefix(Self.maxObstaclesSpoken)
-        advice = Self.advice(clearance: clearance, inPath: tracks.filter { $0.inPath && $0.tier >= .important },
-                             previous: advice)
-        let summary = Self.summary(advice: advice, obstacles: Array(important))
-        if important.contains(where: { $0.category == .stairs }) { startStairsQuiet(now) }
-        let key = ([advice.rawValue] + important.map { "\($0.id)-\($0.direction.rawValue)-\(Self.bucket($0.distance ?? 9))" })
-            .joined(separator: "|")
+        // A report from the last couple of seconds: what to do, then what's around.
+        guard now.timeIntervalSince(lastReportAt) >= Self.reportWindow else { return outputs }
+        let mentioned = Array(recent.prefix(Self.maxObstaclesSpoken))
+        advice = Self.advice(clearance: clearance, inPath: recent.filter(\.inPath), previous: advice)
+        let summary = Self.summary(advice: advice, obstacles: mentioned)
+        if mentioned.contains(where: { $0.category == .stairs }) { startStairsQuiet(now) }
+        let key = Self.reportKey(advice: advice, obstacles: mentioned)
 
         let changed = key != lastSpokenKey
-        let reminder = important.isEmpty && advice == .clear && now.timeIntervalSince(lastSpokenAt) >= Self.clearReminderInterval
+        let reminder = mentioned.isEmpty && advice == .clear && now.timeIntervalSince(lastSpokenAt) >= Self.clearReminderInterval
         let speak = canSpeak && (changed || reminder)
         if speak {
             lastSpokenKey = key
             lastSpokenAt = now
         }
-        outputs.append(.summary(summary, speak: speak, advice: advice, obstacles: important.map(\.id)))
+        // While something else is being read, report as soon as it finishes.
+        if canSpeak { lastReportAt = now }
+        outputs.append(.summary(summary, speak: speak, advice: advice, obstacles: mentioned.map(\.id)))
         return outputs
+    }
+
+    /// One entry per thing, nearest first: the same kind of thing on the same side is one thing,
+    /// even when a swinging camera found it twice.
+    static func distinct(_ tracks: [TrackedObstacle]) -> [TrackedObstacle] {
+        var nearest: [String: TrackedObstacle] = [:]
+        for track in tracks {
+            let key = "\(track.label)|\(side(track.direction))"
+            if let other = nearest[key], (other.distance ?? .infinity) <= (track.distance ?? .infinity) { continue }
+            nearest[key] = track
+        }
+        return nearest.values.sorted { ($0.distance ?? .infinity) < ($1.distance ?? .infinity) }
+    }
+
+    /// A report's meaning, without track identities: what to do, and what's where, roughly how far.
+    static func reportKey(advice: PathAdvice, obstacles: [TrackedObstacle]) -> String {
+        ([advice.rawValue] + obstacles.map { "\($0.label)-\(side($0.direction))-\(bucket($0.distance ?? 9))" })
+            .joined(separator: "|")
+    }
+
+    /// The kind of danger: a post and a sign are both "something in the way"; a drop-off, stairs,
+    /// or something coming toward the user are each their own.
+    static func dangerKey(_ track: TrackedObstacle) -> String {
+        track.isApproaching ? "approaching" : track.category.rawValue
+    }
+
+    private static func side(_ direction: RelativeDirection) -> String {
+        switch direction {
+        case .left, .slightlyLeft: "left"
+        case .ahead: "ahead"
+        case .slightlyRight, .right: "right"
+        }
     }
 
     private mutating func startStairsQuiet(_ now: Date) {
@@ -151,8 +213,10 @@ nonisolated struct WalkNarrator {
 
     // MARK: Wording
 
-    /// "Stop. Post straight ahead. Veer left." The last part says which way to go, out loud and on screen.
-    static func urgentAlert(for track: TrackedObstacle, clearance: PathClearance? = nil) -> ObstacleAlert {
+    /// "Stop. Veer left. Post straight ahead." Out loud, what to do comes right after "Stop.", then what
+    /// it's about; something moving keeps "Wait for it to pass." last so "it" makes sense.
+    /// `others` are added after it, the way a summary says them ("Person on your right, 6 feet.").
+    static func urgentAlert(for track: TrackedObstacle, clearance: PathClearance? = nil, others: [TrackedObstacle] = []) -> ObstacleAlert {
         let place: String
         let guidance: String
         var icon = Maneuver.straight
@@ -177,7 +241,8 @@ nonisolated struct WalkNarrator {
             guidance: guidance,
             guidanceIcon: icon,
             dedupeKey: track.id.uuidString,
-            fragments: ["Stop.", track.label, place, guidance]
+            fragments: (track.isApproaching ? ["Stop.", track.label, place, guidance] : ["Stop.", guidance, track.label, place])
+                + others.flatMap(observation)
         )
     }
 
@@ -202,8 +267,8 @@ nonisolated struct WalkNarrator {
         var headline: [String] = []
         var fragments = [advice.rawValue]
         for track in obstacles {
-            guard let distance = track.distance else { continue }
-            let pieces = [track.label, "\(track.direction.spoken),", "\(DistanceText.spoken(distance))."]
+            let pieces = observation(track)
+            guard !pieces.isEmpty else { continue }
             headline.append(pieces.joined(separator: " "))
             fragments += pieces
         }
@@ -217,6 +282,12 @@ nonisolated struct WalkNarrator {
             dedupeKey: "summary",
             fragments: fragments
         )
+    }
+
+    /// "Person" "on your right," "6 feet." — pre-recorded pieces, so it plays instantly.
+    static func observation(_ track: TrackedObstacle) -> [String] {
+        guard let distance = track.distance else { return [] }
+        return [track.label, "\(track.direction.spoken),", "\(DistanceText.spoken(distance))."]
     }
 
     /// Which way to go. With LiDAR, from how much room there is straight ahead and to each side;

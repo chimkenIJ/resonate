@@ -121,7 +121,8 @@ The YOLO model is in `Resonate/Resources/Models/YOLO11s.mlpackage`. Read [its mo
 
 ### Speech and other feedback
 
-- [FeedbackCenter.swift](Resonate/Services/Feedback/FeedbackCenter.swift) applies feedback preferences and deduplicates obstacle alerts. It routes speech, haptics, tones, one-time notices, and Repeat.
+- [SpeechQueue.swift](Resonate/Models/SpeechQueue.swift) decides what's said next: one sentence at a time; safety cuts in at once; a newer message at least as important replaces the rest of the current one; only one less important message waits. Priorities: info < snapshot (scene description) < navigation < safety.
+- [FeedbackCenter.swift](Resonate/Services/Feedback/FeedbackCenter.swift) applies feedback preferences and deduplicates obstacle alerts. With voice on, buzzes and tones are only for immediate danger; without voice, turns and proximity still buzz. It routes speech, haptics, tones, one-time notices, and Repeat.
 - [ElevenLabsSpeechService.swift](Resonate/Services/Live/ElevenLabsSpeechService.swift) manages voice selection, cached clips, a playback queue, priorities, previews, interruption, and device speech fallback.
 - `SpeechClipStore` caches clips in Application Support by a hash of their text and voice version. Safety phrases can be assembled from cached fragments.
 - [SpeechPhrases.swift](Resonate/Models/SpeechPhrases.swift) defines prewarmed safety fragments; keep phrase generation and fragment coverage tests consistent.

@@ -37,6 +37,8 @@ final class VoiceAssistant {
     /// The user let go before the microphone had started.
     @ObservationIgnored private var releasedEarly = false
     @ObservationIgnored private var pressStarted = Date.distantPast
+    /// True while one of Claude's actions runs, so the screen changes it makes don't stop it.
+    @ObservationIgnored private var isRunningTool = false
 
     private static let enabledKey = "assistant.enabled"
     /// Tool calls Claude can chain for one request ("find Kroger and take me there").
@@ -117,6 +119,13 @@ final class VoiceAssistant {
         let start = pendingStart
         pendingStart = nil
         start?()
+    }
+
+    /// The user went to another screen themselves: what the assistant was about to say, or was
+    /// saying, is out of date. The conversation is kept.
+    func screenChanged() {
+        guard !isRunningTool, state == .thinking || state == .speaking else { return }
+        interrupt()
     }
 
     /// Stops listening and speaking and forgets the conversation.
@@ -246,9 +255,11 @@ final class VoiceAssistant {
                 await waitForSpeechToFinish()
                 state = .thinking
                 var results: [JSONValue] = []
+                isRunningTool = true
                 for call in reply.content where call["type"]?.stringValue == "tool_use" {
                     results.append(await runTool(call))
                 }
+                isRunningTool = false
                 try Task.checkCancellation()
                 messages.append(["role": "user", "content": .array(results)])
             }
@@ -309,6 +320,7 @@ final class VoiceAssistant {
         case .walk(nil): lines.append("Screen: walk mode, camera warning about obstacles.")
         case .indoor: lines.append("Screen: indoor scan camera.")
         case .colors: lines.append("Screen: color naming camera.")
+        case .scanArea: lines.append("Screen: scan the area, camera describing the surroundings.")
         case nil:
             var screen = "\(router.tab.title) tab"
             switch router.paths[router.tab]?.last {

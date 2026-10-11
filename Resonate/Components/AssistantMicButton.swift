@@ -75,8 +75,11 @@ struct AssistantMicOverlay: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay {
             let router = app.router
-            let tabBarHidden = onEveryScreen || !(router.paths[router.tab] ?? []).isEmpty
-            if app.assistant.isEnabled, app.phase == .ready, tabBarHidden {
+            let path = router.paths[router.tab] ?? []
+            let tabBarHidden = onEveryScreen || !path.isEmpty
+            // The route screen has its own microphone at the top, over the map.
+            let hasOwnButton = !onEveryScreen && { if case .route = path.last { true } else { false } }()
+            if app.assistant.isEnabled, app.phase == .ready, tabBarHidden, !hasOwnButton {
                 FloatingTalkButton(assistant: app.assistant)
             }
         }

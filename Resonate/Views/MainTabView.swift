@@ -69,6 +69,8 @@ struct MainTabView: View {
                 feedback: app.feedback,
                 routingPreferences: app.preferences.routing
             ))
+        case .scanArea:
+            ScanAreaView(model: ScanAreaViewModel(services: app.services, feedback: app.feedback))
         case .indoor:
             IndoorScanView(model: IndoorScanViewModel(services: app.services, feedback: app.feedback))
         case .colors:

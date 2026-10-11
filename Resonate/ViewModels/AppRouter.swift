@@ -51,12 +51,15 @@ enum AppRoute: Hashable {
 enum CoverRoute: Identifiable, Hashable {
     /// Obstacle detection. With a route it also gives turn-by-turn directions.
     case walk(Route?)
+    /// Describes what's around the user. No obstacle detection.
+    case scanArea
     case indoor
     case colors
 
     var id: String {
         switch self {
         case .walk(let route): "walk-\(route?.id.uuidString ?? "free")"
+        case .scanArea: "scan-area"
         case .indoor: "indoor"
         case .colors: "colors"
         }

@@ -40,8 +40,8 @@ struct HomeView: View {
             // Yellow, green, blue, purple from top to bottom.
             VStack(spacing: 16) {
                 if needs.contains(.gettingAround) {
-                    tile("Walk outside", "Warns you about obstacles", "location", .sand, tileHeight) {
-                        app.router.cover = .walk(nil)
+                    tile("Scan the area", "Tells you what's around you", "eye", .sand, tileHeight) {
+                        app.router.cover = .scanArea
                     }
                 }
                 tile("Search", "Find a place and get a route there", "magnifyingglass", .sage, tileHeight) {

@@ -6,6 +6,7 @@
 #   Walking routes  → Stadia Maps' hosted Valhalla (free tier, same engine as the local container)
 #   Place search    → the osm_places table in the hosted database
 #   Voice, scenes   → ElevenLabs and Gemini, keys copied from supabase/functions/.env.local
+#   Voice assistant → Claude, key copied from supabase/functions/.env.local
 #
 # Usage: fill in server/.env.cloud (see server/.env.cloud.example), then
 #   server/scripts/deploy_cloud.sh            # everything
@@ -42,7 +43,7 @@ echo "→ Function secrets…"
 secrets="$(mktemp)"
 trap 'rm -f "$secrets"' EXIT
 # Keys from local development, minus the local-only routing address.
-grep -E '^(ELEVENLABS_API_KEY|ELEVENLABS_VOICE_ID|GEMINI_API_KEY|GEMINI_MODEL|UPSTREAM_USER_AGENT)=' \
+grep -E '^(ELEVENLABS_API_KEY|ELEVENLABS_VOICE_ID|GEMINI_API_KEY|GEMINI_MODEL|ANTHROPIC_API_KEY|ANTHROPIC_WORKSPACE_ID|ANTHROPIC_MODEL|ANTHROPIC_EFFORT|UPSTREAM_USER_AGENT)=' \
   supabase/functions/.env.local > "$secrets"
 {
   echo "VALHALLA_URL=https://api.stadiamaps.com"

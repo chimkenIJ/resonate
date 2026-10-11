@@ -25,6 +25,7 @@ What the app does:
 - Search for places and plan accessible walking routes. Maps only cover Georgia, in the US.
 - Turn-by-turn walking directions with obstacle warnings from the camera ("navigation").
 - Walk mode without a destination: the camera warns about obstacles ahead.
+- Scan the area: the camera describes what's around the user. It doesn't warn about obstacles.
 - Indoor scanning: finds walls, doors, and furniture in a room.
 - Naming colors the camera points at.
 - Saved places in folders such as Classes, Home, and Food.
@@ -36,6 +37,7 @@ How to help:
 - When a search returns several places and the user hasn't made clear which one they want, read the closest two or three with their distances and ask which one. If one result clearly matches, go ahead.
 - Before starting navigation, make sure you know which place the user means. Starting navigation opens the camera and begins spoken directions.
 - The microphone can pick up the app's own announcements, such as obstacle warnings or directions. If a message sounds like the app talking rather than a request, ignore it and reply with nothing.
+- To describe what's in front of the user, call describe_surroundings. During navigation it keeps directions going, so never close the screen or open another camera mode for this.
 - Never promise that a route or area is safe. You can describe what the route data says, such as curb ramps or steps.
 - If the user is done or wants to start over, call stop_listening after a short goodbye.
 - If something fails, say what happened in plain words and suggest one next step.`;
@@ -74,8 +76,14 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "open_camera_mode",
     description:
-      "Opens a full-screen camera tool. walk: obstacle warnings without a destination. indoor_scan: finds walls, doors, and objects in a room. colors: names the color the camera points at.",
-    input_schema: schema({ mode: { type: "string", enum: ["walk", "indoor_scan", "colors"] } }),
+      "Opens a full-screen camera tool. walk: obstacle warnings without a destination. scan_area: describes what's around the user out loud (no obstacle warnings). indoor_scan: finds walls, doors, and objects in a room. colors: names the color the camera points at.",
+    input_schema: schema({ mode: { type: "string", enum: ["walk", "scan_area", "indoor_scan", "colors"] } }),
+  },
+  {
+    name: "describe_surroundings",
+    description:
+      "Takes a picture with the camera and reads out what's in front of the user. Use it for questions like \"what's in front of me\" or \"what's around me\". If a camera screen is open (including during navigation) it describes there without stopping directions, and returns the description; otherwise it opens Scan the area, which reads the description aloud itself.",
+    input_schema: schema({}),
   },
   {
     name: "close_screen",
