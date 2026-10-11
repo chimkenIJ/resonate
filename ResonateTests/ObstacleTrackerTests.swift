@@ -293,7 +293,7 @@ struct WalkNarratorTests {
         #expect(narrator.isOnStairs)
         // The phone tilts: the steps come back as new things over and over. None of it is said.
         for i in 1...20 {
-            var again = track(i.isMultiple(of: 2) ? "Step up" : "Obstacle", i.isMultiple(of: 2) ? .stairs : .obstacle, distance: 1, tier: .urgent)
+            var again = track(i.isMultiple(of: 2) ? TerrainAnalyzer.stairsUpLabel : "Obstacle", i.isMultiple(of: 2) ? .stairs : .obstacle, distance: 1, tier: .urgent)
             again.hits = [true]
             let outputs = narrator.update(tracks: [again, stairs], clearance: nil, canSpeak: true, now: start.addingTimeInterval(Double(i) * 0.5))
             #expect(!outputs.contains { if case .urgent = $0 { true } else { false } })

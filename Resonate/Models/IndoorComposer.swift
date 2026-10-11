@@ -108,38 +108,40 @@ nonisolated enum IndoorComposer {
         var guidance: [String] = []
         var icon = Maneuver.straight
         var key: [String]
-        // At most two things in one update: what matters most, then what else is close.
+        // At most two things in one update: what to do first, then what matters most and what else is close.
+        // Keys say what and where, not which scanned element, since the scan renames things as it improves.
         let others: ArraySlice<Placed>
 
         if let block {
             let sentence = describe(block)
             headline = sentence.joined(separator: " ")
             if isClosedDoor(block) {
+                // The door is where they're going: say it's there, then how to open it.
                 summary = sentence + [closedDoorGuidance]
                 guidance.append(closedDoorGuidance)
             } else if block.element.kind == .wall {
-                summary = sentence + ["Turn left or right."]
+                summary = ["Turn left or right."] + sentence
                 guidance.append("Wall ahead. Turn left or right.")
             } else {
                 let pass = passSide(block)
-                summary = sentence + [pass.text]
+                summary = [pass.text] + sentence
                 guidance.append(block.distance <= stopDistance ? "Stop. \(pass.text)" : pass.text)
                 icon = pass.icon
             }
-            key = ["block-\(block.element.id)-\(side(block.bearing))-\(bucket(block.distance))"]
+            key = ["block-\(block.element.label)-\(side(block.bearing))-\(bucket(block.distance))"]
             others = around.prefix(1)
         } else if let door = doorAhead {
             let sentence = describe(door)
             headline = sentence.joined(separator: " ")
-            summary = sentence + (isClosedDoor(door) ? ["It's closed."] : [])
+            summary = ["Clear ahead."] + sentence + (isClosedDoor(door) ? ["It's closed."] : [])
             guidance.append("Walk straight.")
-            key = ["door-\(door.element.id)-\(side(door.bearing))-\(bucket(door.distance))"]
+            key = ["door-\(side(door.bearing))-\(bucket(door.distance))"]
             others = around.prefix(1)
         } else if let first = around.first {
             headline = describe(first).joined(separator: " ")
-            summary = []
+            summary = ["Clear ahead."]
             guidance.append("Walk straight.")
-            key = []
+            key = ["clear"]
             others = around.prefix(2)
         } else {
             headline = "The way ahead is clear."
@@ -151,7 +153,7 @@ nonisolated enum IndoorComposer {
         // Nearby things are mentioned again only if they change or move to another side, not as you step closer.
         for item in others {
             summary += describe(item)
-            key.append("near-\(item.element.id)-\(side(item.bearing))")
+            key.append("near-\(item.element.label)-\(side(item.bearing))")
         }
         if let side = wallAlongside(placed) {
             guidance.append("Wall stays on your \(side).")
@@ -264,7 +266,7 @@ nonisolated enum IndoorComposer {
         item.element.category == .stairs && item.element.label.hasPrefix("Stairs")
     }
 
-    /// Something right in front: "Stop. Chair right in front of you. Step right to pass."
+    /// Something right in front: "Stop. Step right to pass. Chair right in front of you."
     /// Stairs a little sooner. Doors never: walking up to a door is the point.
     private static func alert(for placed: [Placed]) -> ObstacleAlert? {
         let stairs = placed.filter { isStairs($0) && inCorridor($0, within: stairsWarning) }
@@ -280,9 +282,11 @@ nonisolated enum IndoorComposer {
             guidance = passSide(item).text
         }
         let sentence = describe(item)
+        // Repeats are by kind of danger, not scanned element (the scan renames things as it improves).
+        let kind = isStairs(item) ? "stairs" : item.element.kind == .wall ? "wall" : item.element.category.rawValue
         return ObstacleAlert(severity: .stop, headline: "Stop. \(sentence.joined(separator: " "))", guidance: guidance,
                              guidanceIcon: item.element.kind == .wall ? .straight : passSide(item).icon,
-                             dedupeKey: item.element.id.uuidString, fragments: ["Stop."] + sentence + [guidance])
+                             dedupeKey: kind, fragments: ["Stop.", guidance] + sentence)
     }
 
     /// Rough length and width of the room from its walls, measured along the longest wall.

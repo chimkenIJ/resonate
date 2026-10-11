@@ -45,13 +45,13 @@ struct IndoorComposerTests {
         ], pose: pose)
         #expect(result.headline == "Door 7 steps straight ahead.")
         #expect(result.guidance == "Walk straight. Wall stays on your left.")
-        #expect(result.summary.joined(separator: " ") == "Door 7 steps straight ahead.")
+        #expect(result.summary.joined(separator: " ") == "Clear ahead. Door 7 steps straight ahead.")
         #expect(result.alert == nil)
     }
 
     @Test func saysWhenTheDoorAheadIsClosed() {
         let result = IndoorComposer.compose([door(open: false, ahead: 4)], pose: pose)
-        #expect(result.summary.joined(separator: " ") == "Door 6 steps straight ahead. It's closed.")
+        #expect(result.summary.joined(separator: " ") == "Clear ahead. Door 6 steps straight ahead. It's closed.")
     }
 
     @Test func prefersAnOpenDoorToACloserClosedOne() {
@@ -70,7 +70,8 @@ struct IndoorComposerTests {
         // Chair slightly left of center, 1.2 m ahead: step right, but no "Stop" yet.
         let result = IndoorComposer.compose([object("Chair", ahead: 1.2, right: -0.15)], pose: pose)
         #expect(result.guidance.hasPrefix("Step right to pass."))
-        #expect(result.summary.last == "Step right to pass.")
+        // What to do first, then what it's about.
+        #expect(result.summary.first == "Step right to pass.")
         #expect(result.alert == nil)
     }
 
@@ -80,6 +81,7 @@ struct IndoorComposerTests {
         let alert = try #require(result.alert)
         #expect(alert.severity == .stop)
         #expect(alert.headline == "Stop. Table right in front of you.")
+        #expect(alert.spokenText == "Stop. Step right to pass. Table right in front of you.")
     }
 
     @Test func aDoorRightInFrontIsNotAStop() {
@@ -134,7 +136,7 @@ struct IndoorComposerTests {
         let chair = object("Chair", ahead: 2, right: -1.5)
         let plant = object("Plant", ahead: 2.6, right: 1.4, category: .obstacle)
         let result = IndoorComposer.compose([chair, plant], pose: pose)
-        #expect(result.summary.joined(separator: " ") == "Chair 3 steps ahead, on your left. Plant 4 steps ahead, on your right.")
+        #expect(result.summary.joined(separator: " ") == "Clear ahead. Chair 3 steps ahead, on your left. Plant 4 steps ahead, on your right.")
         #expect(result.relevant.isSuperset(of: [chair.id, plant.id]))
     }
 
@@ -156,7 +158,7 @@ struct IndoorComposerTests {
     @Test func aStepSaysWatchTheStep() throws {
         let step = object("Step down", ahead: 1.2, right: 0, size: 0.6, category: .dropOff)
         let result = IndoorComposer.compose([step], pose: pose)
-        #expect(result.summary.last == "Watch the step.")
+        #expect(result.summary.first == "Watch the step.")
         // A single step isn't stairs: no early "Find the railing".
         #expect(result.alert == nil)
     }
@@ -186,9 +188,20 @@ struct IndoorNavigatorTests {
         var navigator = IndoorNavigator()
         let scene = IndoorComposer.compose([object("Chair", ahead: 2, right: 0)], pose: pose)
         #expect(said(navigator.update(scene, canSpeak: true, now: start)).isEmpty)
-        #expect(said(navigator.update(scene, canSpeak: true, now: start.addingTimeInterval(5))) == ["Chair 3 steps straight ahead. Step right to pass."])
+        #expect(said(navigator.update(scene, canSpeak: true, now: start.addingTimeInterval(5))) == ["Step right to pass. Chair 3 steps straight ahead."])
         for t in stride(from: 6.0, through: 60, by: 1) {
             #expect(said(navigator.update(scene, canSpeak: true, now: start.addingTimeInterval(t))).isEmpty)
+        }
+    }
+
+    @Test func aRescannedThingDoesntGetAnotherStop() {
+        var navigator = IndoorNavigator()
+        #expect(navigator.update(IndoorComposer.compose([object("Table", ahead: 0.6, right: 0)], pose: pose), canSpeak: true, now: start)
+            .contains { if case .urgent = $0 { true } else { false } })
+        // The scan improves and the same table comes back as a new element, renamed.
+        for t in 1...10 {
+            let rescanned = IndoorComposer.compose([object(t.isMultiple(of: 2) ? "Table" : "Cabinet", ahead: 0.6, right: 0)], pose: pose)
+            #expect(!navigator.update(rescanned, canSpeak: true, now: start.addingTimeInterval(Double(t))).contains { if case .urgent = $0 { true } else { false } })
         }
     }
 
@@ -209,13 +222,13 @@ struct IndoorNavigatorTests {
             IndoorComposer.compose([door(open: true, ahead: ahead, right: right, id: id)], pose: FloorPose(position: .zero, forward: facing))
         }
         let start = navigator.startGuiding(scene(ahead: 4, right: -3), now: self.start)
-        #expect(said(start) == ["Door 7 steps ahead, on your left. Turn slightly left."])
+        #expect(said(start) == ["Turn slightly left. Door 7 steps ahead, on your left."])
         #expect(navigator.isGuiding)
 
         // Turned to face it: a tap, and "walk straight".
         let turned = navigator.update(scene(ahead: 5, right: 0), canSpeak: true, now: self.start.addingTimeInterval(4))
         #expect(turned.contains(.aligned))
-        #expect(said(turned) == ["Door 7 steps straight ahead. Walk straight."])
+        #expect(said(turned) == ["Walk straight. Door 7 steps straight ahead."])
 
         // At the door.
         let there = navigator.update(scene(ahead: 0.6, right: 0), canSpeak: true, now: self.start.addingTimeInterval(10))

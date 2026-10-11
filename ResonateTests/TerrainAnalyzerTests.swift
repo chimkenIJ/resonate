@@ -43,11 +43,9 @@ struct TerrainAnalyzerTests {
         #expect(TerrainAnalyzer.objects(from: findings).first?.label == "Drop-off")
     }
 
-    @Test func findsAStepUp() throws {
+    @Test func aSingleStepUpIsNotAnnounced() {
         let findings = TerrainAnalyzer.analyze(ground { $0 < 2.4 ? chest : chest + 0.17 })
-        let step = try #require(findings.first)
-        #expect(step.kind == .stepUp)
-        #expect(abs(step.distance - 2.4) <= 0.3)
+        #expect(findings.isEmpty)
     }
 
     /// Risers of 17 cm every 28 cm, starting `at` meters ahead.
@@ -75,7 +73,7 @@ struct TerrainAnalyzerTests {
 
     @Test func aSingleStepIsNotStairs() {
         let findings = TerrainAnalyzer.analyze(ground { $0 < 2.4 ? chest : chest + 0.17 })
-        #expect(findings.map(\.kind) == [.stepUp])
+        #expect(!findings.contains { $0.kind == .stairsUp })
     }
 
     @Test func aSteepGrassyBankIsNotStairs() {

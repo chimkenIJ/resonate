@@ -15,13 +15,12 @@ nonisolated struct TerrainSample: Sendable {
     var imageX: Double = 0.5
 }
 
-/// Finds what YOLO can't: curb drops and other drop-offs, steps up, and unlabeled things in the
+/// Finds what YOLO can't: curb drops and other drop-offs, stairs, and unlabeled things in the
 /// way (poles, posts, walls, low branches), from LiDAR depth in a corridor ahead of the user.
 /// Pure geometry, so it is easy to test.
 nonisolated enum TerrainAnalyzer {
     nonisolated enum Kind: Sendable {
         case dropOff
-        case stepUp
         case stairsUp
         case stairsDown
         case obstacle
@@ -105,10 +104,8 @@ nonisolated enum TerrainAnalyzer {
                 findings.append(Finding(kind: .dropOff, distance: bin.start, heightChange: -change, imageY: bin.imageY))
                 break
             }
-            if change > edgeThreshold, change < stepMaxHeight {
-                findings.append(Finding(kind: .stepUp, distance: bin.start, heightChange: change, imageY: bin.imageY))
-                break
-            }
+            // A single step up isn't announced (too often wrong); just don't judge the ground past it.
+            if change > edgeThreshold, change < stepMaxHeight { break }
             if abs(change) <= edgeThreshold { level = bin.height }
         }
 
@@ -193,10 +190,6 @@ nonisolated enum TerrainAnalyzer {
             case .dropOff:
                 return DetectedObject(label: finding.heightChange > 0.3 ? "Drop-off" : "Curb drop", category: .dropOff,
                                       confidence: 1, boundingBox: CGRect(x: 0.1, y: y - 0.02, width: 0.8, height: 0.04),
-                                      distanceMeters: finding.distance, lateralMeters: 0)
-            case .stepUp:
-                return DetectedObject(label: "Step up", category: .stairs, confidence: 1,
-                                      boundingBox: CGRect(x: 0.1, y: y - 0.02, width: 0.8, height: 0.04),
                                       distanceMeters: finding.distance, lateralMeters: 0)
             case .stairsUp, .stairsDown:
                 return DetectedObject(label: finding.kind == .stairsUp ? stairsUpLabel : stairsDownLabel, category: .stairs,

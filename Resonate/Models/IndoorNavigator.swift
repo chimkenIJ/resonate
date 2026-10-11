@@ -1,9 +1,10 @@
 import Foundation
 
-/// Decides what to say indoors, so the user hears what helps them get around and nothing else:
-/// - "Stop" only for something right in front of them, once.
-/// - A short update only when the situation changes ("Door 5 steps ahead, on your left."),
-///   at most every `summaryInterval` seconds.
+/// Decides what to say indoors, so the user hears what helps them get around and nothing else.
+/// Like walking outside: what to do first, then what's around.
+/// - "Stop" only for something right in front of them, once per kind of danger.
+/// - A short update only when the situation changes ("Clear ahead. Door 5 steps ahead, on your left."),
+///   at most every `summaryInterval` seconds, and never over other speech.
 /// - The room's size and door count once, when it's known.
 /// - Guiding to a door: which way to turn, a tap when facing it, and when they've reached it.
 /// Pure logic, easy to test.
@@ -27,8 +28,8 @@ nonisolated struct IndoorNavigator {
         case toDoor(id: UUID, center: SIMD2<Double>)
     }
 
-    static let summaryInterval: TimeInterval = 5
-    /// The same thing doesn't get another "Stop" until it's been gone this long.
+    static let summaryInterval: TimeInterval = 3
+    /// The same kind of danger doesn't get another "Stop" until it's been gone this long.
     static let urgentCooldown: TimeInterval = 8
     /// Guidance repeats at most this often, and only when the turn or the distance changed.
     static let guideInterval: TimeInterval = 3
@@ -74,7 +75,12 @@ nonisolated struct IndoorNavigator {
         // "Stop": once per thing, again only after it's been gone a while.
         urgentSaid = urgentSaid.filter { now.timeIntervalSince($0.value) < Self.urgentCooldown }
         if let alert = scene.alert {
-            if urgentSaid[alert.dedupeKey] == nil { outputs.append(.urgent(alert)) }
+            if urgentSaid[alert.dedupeKey] == nil {
+                outputs.append(.urgent(alert))
+                // The alert said it; the next update shouldn't repeat it.
+                lastSummaryKey = scene.summaryKey
+                lastSummaryAt = now
+            }
             urgentSaid[alert.dedupeKey] = now
         }
 
@@ -198,7 +204,7 @@ nonisolated struct IndoorNavigator {
             guideSaidTurn = turn.text
             guideSaidSteps = steps
             guideSaidAt = now
-            outputs.append(.say(remember([name] + place + [turn.text])))
+            outputs.append(.say(remember([turn.text, name] + place)))
         }
         return outputs
     }
