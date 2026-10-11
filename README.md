@@ -140,6 +140,8 @@ Resonate/
   Theme/          Colors, typography, and spacing
   Resources/      Fonts, Core ML model, and local configuration
 ResonateTests/    Unit tests
+config/          Example app configuration
+auth0/           Auth0 login action
 supabase/        Database migrations and Edge Functions
 server/          Map server containers and development scripts
 docs/            Backend and map setup guides
